@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from nilearn import datasets, plotting
 from scipy.ndimage import gaussian_filter
+import scipy.sparse
 import nibabel as nib
 import matplotlib
 import matplotlib.pyplot as plt
@@ -50,11 +51,53 @@ def plot_activity_map(stat_img, threshold=0.1):
     plotting.plot_glass_brain(stat_img, black_bg=True, threshold=threshold*np.max(stat_img.get_data()))
     plotting.show()
 
+def build_index(file_name):
+    decode = dict(enumerate(line.strip() for line in open(input_path+file_name)))
+    encode = {v: k for k, v in decode.items()}
+    
+    return encode, decode
+
 
 if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
-    pmid = 15522765 
-    stat_img = build_activity_map_from_pmid(pmid, sigma=1.5)
-    plot_activity_map(stat_img)
+    # pmid = 22266924 
+    # stat_img = build_activity_map_from_pmid(pmid, sigma=1.5)
+    # plot_activity_map(stat_img)
+
+
+    # Step 2
+    corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
+
+    # feature_file = open(input_path+'feature_names.txt')
+    # feature_index = dict()
+    # k = 0
+    # for line in feature_file:
+    #     # print(line.strip())
+    #     feature_index[line.strip()] = k
+    #     k += 1
+
+    # pmids_file = open(input_path+'pmids.txt')
+    # pmids_index = dict()
+    # k = 0
+    # for line in pmids_file:
+    #     # print(line.strip())
+    #     pmids_index[int(line.strip())] = k
+    #     k += 1
+    
+    # print(feature_index)
+    # print(pmids_index)
+    # print(corpus_tfidf[13880, 6179])
+    # print(corpus_tfidf[pmids_index[15522765], feature_index['a1']])
+
+    # def build_activity_map_from_feature(feature_name, sigma=1):
+    #     feature_id = feature_index[feature_name]
+    #     print(feature_id)
+    #     frequencies = corpus_tfidf[corpus_tfidf[:, feature_id].nonzero()[0], feature_id]
+    #     print(frequencies)
+
+    # build_activity_map_from_feature('memory')
+
+    encode_feature, decode_feature = build_index('feature_names.txt')
+    encode_pmid, decode_pmid = build_index('pmids.txt')
 
 
