@@ -47,13 +47,13 @@ def plot_activity_map(stat_img, threshold=0.1):
         stat_img : Object of Nifti1Image Class
         threshold : min value to display (in percent of maximum)
     '''
-    plotting.plot_stat_map(stat_img, bg_img=bg_img, threshold=threshold*np.max(stat_img.get_data()))
+    plotting.plot_glass_brain(stat_img, black_bg=True, threshold=threshold*np.max(stat_img.get_data()))
     plotting.show()
 
 
 if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
-    pmid = 23966927
+    pmid = 15522765 
     stat_img = build_activity_map_from_pmid(pmid, sigma=1.5)
     plot_activity_map(stat_img)
 
