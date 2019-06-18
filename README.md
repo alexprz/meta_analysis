@@ -10,4 +10,4 @@ Choose your pmid in the `pmids.txt` file and edit the `main.py`file with it. The
 python main.py
 ```
 Here is an exemple of activity map.
-![alt text](plot_activity_map_23966927.png)
+![alt text](plot/plot_activity_map_15522765.png)
