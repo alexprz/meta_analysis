@@ -10,20 +10,21 @@ matplotlib.use('TkAgg')
 
 input_path = 'minimal/'
 
-def build_activity_map(pmid, sigma=1, threshold=0.1):
+# Loading MNI152 background and parameters (shape, affine...)
+bg_img = datasets.load_mni152_template()
+Ni, Nj, Nk = bg_img.shape
+affine = bg_img.affine
+inv_affine = np.linalg.inv(affine)
+
+def build_activity_map_from_pmid(pmid, sigma=1):
     '''
         Given a pmid, build its corresponding activity map
+
+        pmid : integer found in pmids.txt
         sigma : std used in gaussian blurr
-        threshold : min value to display (in percent of maximum)
     '''
 
     coordinates = pd.read_csv(input_path+'coordinates.csv')
-
-    # Loading MNI152 background
-    bg_img = datasets.load_mni152_template()
-    Ni, Nj, Nk = bg_img.shape
-    affine = bg_img.affine
-    inv_affine = np.linalg.inv(affine)
 
     # Building blank stat_img with MNI152's shape
     stat_img_data = np.zeros((Ni,Nj,Nk))
@@ -38,14 +39,22 @@ def build_activity_map(pmid, sigma=1, threshold=0.1):
         
     # Add gaussian blurr and build stat_img
     stat_img_data = gaussian_filter(stat_img_data, sigma=sigma)
-    stat_img = nib.Nifti1Image(stat_img_data, affine)
 
-    # Plot stat_img on MNI152 background
-    plotting.plot_stat_map(stat_img, bg_img=bg_img, threshold=threshold*np.max(stat_img_data))
+    return nib.Nifti1Image(stat_img_data, affine)
+
+def plot_activity_map(stat_img, threshold=0.1):
+    '''
+        Plot stat_img on MNI152 background
+
+        stat_img : Object of Nifti1Image Class
+        threshold : min value to display (in percent of maximum)
+    '''
+    plotting.plot_stat_map(stat_img, bg_img=bg_img, threshold=threshold*np.max(stat_img.get_data()))
     plotting.show()
 
 
 if __name__ == '__main__':
-    build_activity_map(23966927, sigma=1.5, threshold=0.1)
+    stat_img = build_activity_map_from_pmid(23966927, sigma=1.5)
+    plot_activity_map(stat_img)
 
 
