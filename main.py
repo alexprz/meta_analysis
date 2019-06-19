@@ -107,7 +107,7 @@ if __name__ == '__main__':
 
     # print(nonzero_pmids)
 
-    feature_id = encode_feature['a1']
+    feature_id = encode_feature['memory']
     # frequencies = corpus_tfidf[:, feature_id].nonzero()[0]
     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
     print(nonzero_pmids)
@@ -129,21 +129,45 @@ if __name__ == '__main__':
     #         # print(i, j, k)
     #         stat_img_data[i, j, k] += 1#corpus_tfidf[encode_pmid[str(pmid)], feature_id]
     nonzero_coordinates = coordinates.loc[coordinates['pmid'].isin(nonzero_pmids)]
-    print(nonzero_coordinates)
-    # print(len(nonzero_coordinates))
+    frequencies = np.array([corpus_tfidf[encode_pmid[str(pmid)], feature_id] for pmid in nonzero_coordinates['pmid']])
+    # print(data)
+    print(len(nonzero_coordinates))
+    n_sample = len(nonzero_coordinates)
+    # nonzero_coordinates['feature_frequency'] = pd.Series(data, index=nonzero_coordinates.index)
+    # # nonzero_coordinates['feature_frequency'] = np.array(data)
+    # print(nonzero_coordinates)
 
-    for index, row in nonzero_coordinates.iterrows():
-        pmid = row['pmid']
-        print(index)
-        # if corpus_tfidf[encode_pmid[str(pmid)], feature_id] == 0:
-        #     # print('continue')
-        #     continue
-        x, y, z = row['x'], row['y'], row['z']
-        i, j, k, _ = np.floor(np.dot(inv_affine, [x, y, z, 1])).astype(int)
-        i, j, k = np.minimum([i, j, k], [Ni-1, Nj-1, Nk-1])
-        # i, j, k, _ = np.rint(np.dot(inv_affine, [x, y, z, 1])).astype(int)
+    coord = np.zeros((n_sample, 3))
+    coord[:, 0] = nonzero_coordinates['x']
+    coord[:, 1] = nonzero_coordinates['y']
+    coord[:, 2] = nonzero_coordinates['z']
+
+    voxel_coords = np.zeros((n_sample, 3)).astype(int)
+    for k in range(n_sample):
+        voxel_coords[k, :] = np.minimum(np.floor(np.dot(inv_affine, [coord[k, 0], coord[k, 1], coord[k, 2], 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
+
+    print(coord)
+    print(voxel_coords)
+    print(frequencies)
+
+    print('Building map')
+    for i, j, k in voxel_coords:
         # print(i, j, k)
         stat_img_data[i, j, k] += 1
+    # print(len(nonzero_coordinates))
+
+    # for index, row in nonzero_coordinates.iterrows():
+    #     pmid = row['pmid']
+    #     print(index)
+    #     # if corpus_tfidf[encode_pmid[str(pmid)], feature_id] == 0:
+    #     #     # print('continue')
+    #     #     continue
+    #     x, y, z = row['x'], row['y'], row['z']
+    #     i, j, k, _ = np.floor(np.dot(inv_affine, [x, y, z, 1])).astype(int)
+    #     i, j, k = np.minimum([i, j, k], [Ni-1, Nj-1, Nk-1])
+    #     # i, j, k, _ = np.rint(np.dot(inv_affine, [x, y, z, 1])).astype(int)
+    #     # print(i, j, k)
+    #     stat_img_data[i, j, k] += 1
 
 
 
