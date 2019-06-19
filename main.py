@@ -41,14 +41,17 @@ def build_activity_map_from_pmid(pmid, sigma=1):
 
     return nib.Nifti1Image(stat_img_data, affine)
 
-def plot_activity_map(stat_img, threshold=0.1):
+def plot_activity_map(stat_img, threshold=0.1, glass_brain=False):
     '''
         Plot stat_img on MNI152 background
 
         stat_img : Object of Nifti1Image Class
         threshold : min value to display (in percent of maximum)
     '''
-    plotting.plot_glass_brain(stat_img, black_bg=True, threshold=threshold*np.max(stat_img.get_data()))
+    if glass_brain:
+        plotting.plot_glass_brain(stat_img, black_bg=True, threshold=threshold*np.max(stat_img.get_data()))
+    else:
+        plotting.plot_stat_map(stat_img, black_bg=True, threshold=threshold*np.max(stat_img.get_data()))
     plotting.show()
 
 def build_index(file_name):
@@ -62,7 +65,7 @@ if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
     # pmid = 22266924 
     # stat_img = build_activity_map_from_pmid(pmid, sigma=1.5)
-    # plot_activity_map(stat_img)
+    # plot_activity_map(stat_img, glass_brain=True)
 
 
     # Step 2
@@ -100,4 +103,49 @@ if __name__ == '__main__':
     encode_feature, decode_feature = build_index('feature_names.txt')
     encode_pmid, decode_pmid = build_index('pmids.txt')
 
+    # nonzero_pmids = np.array([pmid[0, 0] for pmid in corpus_tfidf[:, encode_feature['cognitive']]])
 
+    # print(nonzero_pmids)
+
+    feature_id = encode_feature['a1']
+    # frequencies = corpus_tfidf[:, feature_id].nonzero()[0]
+    nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
+    print(nonzero_pmids)
+    print(nonzero_pmids.shape)
+
+    coordinates = pd.read_csv(input_path+'coordinates.csv')
+    stat_img_data = np.zeros((Ni,Nj,Nk)) # Building blank stat_img with MNI152's shape
+    
+    # nb = len(nonzero_pmids)
+    # count = 0
+    # for pmid in nonzero_pmids:
+    #     print('{} out of {}'.format(count, nb))
+    #     count += 1
+    #     for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+    #         x, y, z = row['x'], row['y'], row['z']
+    #         i, j, k, _ = np.floor(np.dot(inv_affine, [x, y, z, 1])).astype(int)
+    #         i, j, k = np.minimum([i, j, k], [Ni-1, Nj-1, Nk-1])
+    #         # i, j, k, _ = np.rint(np.dot(inv_affine, [x, y, z, 1])).astype(int)
+    #         # print(i, j, k)
+    #         stat_img_data[i, j, k] += 1#corpus_tfidf[encode_pmid[str(pmid)], feature_id]
+    nonzero_coordinates = coordinates.loc[coordinates['pmid'].isin(nonzero_pmids)]
+    print(nonzero_coordinates)
+    # print(len(nonzero_coordinates))
+
+    for index, row in nonzero_coordinates.iterrows():
+        pmid = row['pmid']
+        print(index)
+        # if corpus_tfidf[encode_pmid[str(pmid)], feature_id] == 0:
+        #     # print('continue')
+        #     continue
+        x, y, z = row['x'], row['y'], row['z']
+        i, j, k, _ = np.floor(np.dot(inv_affine, [x, y, z, 1])).astype(int)
+        i, j, k = np.minimum([i, j, k], [Ni-1, Nj-1, Nk-1])
+        # i, j, k, _ = np.rint(np.dot(inv_affine, [x, y, z, 1])).astype(int)
+        # print(i, j, k)
+        stat_img_data[i, j, k] += 1
+
+
+
+    stat_img_data = gaussian_filter(stat_img_data, sigma=1)
+    plot_activity_map(nib.Nifti1Image(stat_img_data, affine), glass_brain=True)
