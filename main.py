@@ -106,21 +106,24 @@ def build_activity_map_from_keyword(keyword, sigma=1):
     return nib.Nifti1Image(stat_img_data, affine)
 
 def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
-    peaks = np.random.uniform((Ni, Nj, Nk), size=(n_peaks, 3)).astype(int)
-    # print(peaks)
-    brain_map = np.zeros((Ni, Nj, Nk))
-    # print(brain_map.shape)
-    unique, unique_counts = np.unique(peaks, axis=0, return_counts=True)
-    # print(unique)
-    # print(unique_counts)
-    # brain_map[unique] = unique_counts
-    brain_map[unique[:, 0], unique[:, 1], unique[:, 2]] = unique_counts
+    brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
     # print(brain_map)
-    # for coord in peaks:
-    #     # print(tuple(coord))
-    #     brain_map[tuple(coord)] += 1
-    # print(brain_map)
+    # peaks = np.random.uniform((Ni, Nj, Nk), size=(n_peaks, 3)).astype(int)
+    # # print(peaks)
+    # brain_map = np.zeros((Ni, Nj, Nk))
+    # # print(brain_map.shape)
+    # unique, unique_counts = np.unique(peaks, axis=0, return_counts=True)
+    # # print(unique)
+    # # print(unique_counts)
+    # # brain_map[unique] = unique_counts
+    # brain_map[unique[:, 0], unique[:, 1], unique[:, 2]] = unique_counts
+    # # print(brain_map)
+    # # for coord in peaks:
+    # #     # print(tuple(coord))
+    # #     brain_map[tuple(coord)] += 1
+    # # print(brain_map)
     brain_map = gaussian_filter(brain_map, sigma=1)
+    # print(brain_map)
     return np.max(brain_map)
     # peaks = np.random.random_integers(N_voxels-1, size=n_peaks)
     # # print(peaks)
@@ -134,10 +137,13 @@ def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
 def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
     max_peaks = np.zeros(N_simulations)
 
+    time0 = time()
     for k in range(N_simulations):
         print(k)
         max_peaks[k] = simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma=sigma)
 
+    print('Time for MC threshold estimation : {}'.format(time()-time0))
+    print('Estimated threshold : {}'.format(np.mean(max_peaks)))
     return np.mean(max_peaks)
 
 if __name__ == '__main__':
@@ -153,4 +159,4 @@ if __name__ == '__main__':
     # plot_activity_map(stat_img, glass_brain=True, threshold=0.3)
 
     # print(simulate_max_peaks(10000, Ni, Nj, Nk, sigma=1.))
-    print(estimate_threshold_monte_carlo(1000, Ni, Nj, Nk, sigma=1.))
+    print(estimate_threshold_monte_carlo(1000, Ni, Nj, Nk, N_simulations=5000, sigma=1.))
