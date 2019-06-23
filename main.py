@@ -100,20 +100,13 @@ def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
     print('Building map')
     for index, value in enumerate(voxel_coords):
         i, j, k = value
-        # stat_img_data[i, j, k] += corpus_tfidf[encode_pmid[str(pmids[index])], feature_id]
         hist_img_data[i, j, k] += 1
         stat_img_data[i, j, k] += frequencies[index]
     
-    # print(stat_img_data)
+
     if gray_matter_mask:
-        # gray_mask = masking.compute_gray_matter_mask(bg_img)
-        # print(gray_mask)
-        # stat_img = masking.intersect_masks([gray_mask, stat_img])
-        
         stat_img_data = np.ma.masked_array(stat_img_data, np.logical_not(gray_mask.get_data()))
         hist_img_data = np.ma.masked_array(hist_img_data, np.logical_not(gray_mask.get_data()))
-
-    # n_peaks = int(np.sum(stat_img_data))
 
     print('Building time : {}'.format(time()-time0))
     stat_img_data = gaussian_filter(stat_img_data, sigma=sigma)
@@ -121,7 +114,7 @@ def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
 
     stat_img = nib.Nifti1Image(stat_img_data, affine)
     hist_img = nib.Nifti1Image(hist_img_data, affine)
-    # print(stat_img_data)
+
     return stat_img, hist_img, n_sample
 
 def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
@@ -129,30 +122,6 @@ def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
     brain_map = np.ma.masked_array(brain_map, np.logical_not(gray_mask.get_data()))
     brain_map = gaussian_filter(brain_map, sigma=sigma)
     return np.max(brain_map)
-    
-    # print(brain_map)
-    # peaks = np.random.uniform((Ni, Nj, Nk), size=(n_peaks, 3)).astype(int)
-    # # print(peaks)
-    # brain_map = np.zeros((Ni, Nj, Nk))
-    # # print(brain_map.shape)
-    # unique, unique_counts = np.unique(peaks, axis=0, return_counts=True)
-    # # print(unique)
-    # # print(unique_counts)
-    # # brain_map[unique] = unique_counts
-    # brain_map[unique[:, 0], unique[:, 1], unique[:, 2]] = unique_counts
-    # # print(brain_map)
-    # # for coord in peaks:
-    # #     # print(tuple(coord))
-    # #     brain_map[tuple(coord)] += 1
-    # # print(brain_map)
-    # print(brain_map)
-    # peaks = np.random.random_integers(N_voxels-1, size=n_peaks)
-    # # print(peaks)
-    # unique, unique_counts = np.unique(peaks, return_counts=True)
-    # print(unique_counts)
-    # print(np.max(unique_counts))
-    # return np.max(unique_counts)
-    # pass
 
 def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
     max_peaks = np.zeros(N_simulations)
@@ -197,15 +166,9 @@ if __name__ == '__main__':
 
 
     # Step 2
-    # gray_mask = masking.compute_gray_matter_mask(bg_img)
-    # print(gray_mask.get_data())
     keyword = 'prosopagnosia'
     sigma = 2
     stat_img, hist_img, nb_peaks = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=True)
     print('Nb peaks : {}'.format(nb_peaks))
     threshold = estimate_threshold_monte_carlo(nb_peaks, Ni, Nj, Nk, N_simulations=5000, sigma=sigma)
-    # threshold = 0.045#0.16
     plot_activity_map(hist_img, glass_brain=False, threshold=threshold)
-
-    # print(simulate_max_peaks(10000, Ni, Nj, Nk, sigma=1.))
-    # print(estimate_threshold_monte_carlo(1000, Ni, Nj, Nk, N_simulations=10000, sigma=1.))
