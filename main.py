@@ -57,12 +57,35 @@ def plot_activity_map(stat_img, threshold=0.1, glass_brain=False):
     plotting.show()
 
 def build_index(file_name):
+    '''
+        Build decode & encode dictionnary of the given file_name.
+
+        encode : dict
+            key : line number
+            value : string at the specified line number
+        decode : dict (reverse of encode)
+            key : string found in the file
+            value : number of the line containing the string
+
+        Used for the files pmids.txt & feature_names.txt
+    '''
     decode = dict(enumerate(line.strip() for line in open(input_path+file_name)))
     encode = {v: k for k, v in decode.items()}
     
     return encode, decode
 
 def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
+    '''
+        From the given keyword, build its metaanalysis activity map from all related pmids.
+
+        sigma : std of the gaussian blurr
+        gray_matter_mask : specify whether the map is restrained to the gray matter or not
+
+        return (stat_img, hist_img, n_sample)
+        stat_img : Nifti1Image object, the map where frequencies are added for each activation
+        hist_img : Nifti1Image object, the map where 1 is added for each activation
+        n_sample : nb of total peaks (inside and outside gray matter)
+    '''
     time0 = time()
     corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
 
@@ -118,12 +141,20 @@ def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
     return stat_img, hist_img, n_sample
 
 def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
+    '''
+        Simulate a map under the null hypothesis and smooth it with a gaussian blurr (ALE method)
+        Return the max encountered.
+    '''
     brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
     brain_map = np.ma.masked_array(brain_map, np.logical_not(gray_mask.get_data()))
     brain_map = gaussian_filter(brain_map, sigma=sigma)
     return np.max(brain_map)
 
 def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
+    '''
+        Generate N_simulation maps under the null hypothesis.
+        Take the 95% percentile of the maxima encoutered.
+    '''
     max_peaks = np.zeros(N_simulations)
     time0 = time()
 
