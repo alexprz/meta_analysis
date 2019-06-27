@@ -8,6 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('TkAgg')
 from time import time
+import multiprocessing
 
 
 input_path = 'minimal/'
@@ -148,7 +149,8 @@ def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
     brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
     brain_map = np.ma.masked_array(brain_map, np.logical_not(gray_mask.get_data()))
     brain_map = gaussian_filter(brain_map, sigma=sigma)
-    return np.max(brain_map)
+    # return np.max(brain_map)
+    return np.percentile(brain_map, .95)
 
 def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
     '''
@@ -163,7 +165,8 @@ def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5
         max_peaks[k] = simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma=sigma)
 
     # estimated_threshold = np.max(max_peaks)
-    estimated_threshold = np.percentile(max_peaks, .95)
+    # estimated_threshold = np.percentile(max_peaks, .95)
+    estimated_threshold = np.mean(max_peaks)
 
     print('Time for MC threshold estimation : {}'.format(time()-time0))
     print('Estimated threshold : {}'.format(estimated_threshold))
