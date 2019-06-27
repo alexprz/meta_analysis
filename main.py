@@ -8,7 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('TkAgg')
 from time import time
-import multiprocessing
+from tools import pool_computing, print_percent
 
 
 input_path = 'minimal/'
@@ -149,8 +149,16 @@ def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
     brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
     brain_map = np.ma.masked_array(brain_map, np.logical_not(gray_mask.get_data()))
     brain_map = gaussian_filter(brain_map, sigma=sigma)
-    # return np.max(brain_map)
-    return np.percentile(brain_map, .95)
+    return np.max(brain_map)
+    # return np.percentile(brain_map, .95)
+
+def simulate_N_maps(N_sim, process_number, kwargs):
+    peaks = np.zeros(N_sim)
+    for k in range(N_sim):
+        peaks[k] = simulate_max_peaks(kwargs['n_peaks'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma'])
+        # print(k)
+        print_percent(k, N_sim, prefix='Simulating map with {} peaks ({}) : '.format(kwargs['n_peaks'], process_number))
+    return peaks
 
 def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
     '''
@@ -168,6 +176,14 @@ def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5
     # estimated_threshold = np.percentile(max_peaks, .95)
     estimated_threshold = np.mean(max_peaks)
 
+    print('Time for MC threshold estimation : {}'.format(time()-time0))
+    print('Estimated threshold : {}'.format(estimated_threshold))
+    return estimated_threshold
+
+def estimate_threshold_monte_carlo_multiprocessing(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
+    time0 = time()
+    result = pool_computing(simulate_N_maps, N_simulations, n_peaks=n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, sigma=sigma)
+    estimated_threshold = np.mean(result)
     print('Time for MC threshold estimation : {}'.format(time()-time0))
     print('Estimated threshold : {}'.format(estimated_threshold))
     return estimated_threshold
@@ -204,5 +220,7 @@ if __name__ == '__main__':
     sigma = 2
     stat_img, hist_img, nb_peaks = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=True)
     print('Nb peaks : {}'.format(nb_peaks))
-    threshold = estimate_threshold_monte_carlo(nb_peaks, Ni, Nj, Nk, N_simulations=5000, sigma=sigma)
+    # threshold = estimate_threshold_monte_carlo(nb_peaks, Ni, Nj, Nk, N_simulations=5000, sigma=sigma)
+    threshold = estimate_threshold_monte_carlo_multiprocessing(nb_peaks, Ni, Nj, Nk, N_simulations=5000, sigma=sigma)
     plot_activity_map(hist_img, glass_brain=False, threshold=threshold)
+    # print(estimate_threshold_monte_carlo_multiprocessing(1000, Ni, Nj, Nk, N_simulations=5000, sigma=sigma))
