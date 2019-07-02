@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 matplotlib.use('TkAgg')
 from time import time
 from tools import pool_computing, print_percent
-# import ray
 import multiprocessing
 from joblib import Parallel, delayed
 
@@ -184,41 +183,12 @@ def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5
     print('Estimated threshold : {}'.format(estimated_threshold))
     return estimated_threshold
 
-
-def estimate_threshold_monte_carlo_ray(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
-    '''
-        Estimate threshold with Monte Carlo using multiprocessing thanks to ray module
-    '''
-    time0 = time()
-    nb_processes=multiprocessing.cpu_count()//2
-    ray.init(num_cpus=nb_processes)
-
-    kwargs = {
-        'Ni': Ni,
-        'Nj': Nj,
-        'Nk': Nk,
-        'sigma': sigma,
-        'n_peaks': n_peaks
-    }
-
-    n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
-    
-    result = ray.get([simulate_N_maps_ray.remote(n, kwargs) for n in n_list])
-
-    estimated_threshold = np.mean(result)
-
-    print('Time for MC threshold estimation : {}'.format(time()-time0))
-    print('Estimated threshold : {}'.format(estimated_threshold))
-    return estimated_threshold
-
-
 def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''
     time0 = time()
     nb_processes=multiprocessing.cpu_count()//2
-    # ray.init(num_cpus=nb_processes)
 
     kwargs = {
         'Ni': Ni,
@@ -229,8 +199,6 @@ def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simula
     }
 
     n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
-    
-    # result = ray.get([simulate_N_maps_ray.remote(n, kwargs) for n in n_list])
 
     result = Parallel(n_jobs=nb_processes)(delayed(simulate_N_maps_ray)(n, kwargs) for n in n_list)
 
