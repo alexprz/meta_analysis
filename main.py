@@ -177,7 +177,7 @@ def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5
         print(k)
         max_peaks[k] = simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma=sigma)
 
-    estimated_threshold = np.percentile(max_peaks, .99)
+    estimated_threshold = np.mean(max_peaks)
 
     print('Time for MC threshold estimation : {}'.format(time()-time0))
     print('Estimated threshold : {}'.format(estimated_threshold))
@@ -204,7 +204,8 @@ def estimate_threshold_monte_carlo_ray(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulatio
     
     result = ray.get([simulate_N_maps_ray.remote(n, kwargs) for n in n_list])
 
-    estimated_threshold = np.percentile(result, .99)
+    estimated_threshold = np.mean(result)
+
     print('Time for MC threshold estimation : {}'.format(time()-time0))
     print('Estimated threshold : {}'.format(estimated_threshold))
     return estimated_threshold
