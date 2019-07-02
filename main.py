@@ -10,10 +10,11 @@ matplotlib.use('TkAgg')
 from time import time
 from tools import pool_computing, print_percent
 import multiprocessing
-from joblib import Parallel, delayed
-
+from joblib import Parallel, delayed, Memory
 
 input_path = 'minimal/'
+cache_dir = 'cache_joblib'
+mem = Memory(cache_dir)
 
 # Loading MNI152 background and parameters (shape, affine...)
 bg_img = datasets.load_mni152_template()
@@ -153,11 +154,10 @@ def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
     brain_map = gaussian_filter(brain_map, sigma=sigma)
     return np.max(brain_map)
 
-# @ray.remote
-def simulate_N_maps_ray(N_sim, kwargs):
+def simulate_N_maps_joblib(N_sim, kwargs):
     '''
         Equivalent to simulate_max_peaks function called N_sim times.
-        (Used for multiprocessing with ray)
+        (Used for multiprocessing with joblib)
     '''
     peaks = np.zeros(N_sim)
     for k in range(N_sim):
@@ -183,6 +183,7 @@ def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5
     print('Estimated threshold : {}'.format(estimated_threshold))
     return estimated_threshold
 
+@mem.cache
 def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
@@ -200,13 +201,14 @@ def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simula
 
     n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
 
-    result = Parallel(n_jobs=nb_processes)(delayed(simulate_N_maps_ray)(n, kwargs) for n in n_list)
+    result = Parallel(n_jobs=nb_processes)(delayed(simulate_N_maps_joblib)(n, kwargs) for n in n_list)
 
     estimated_threshold = np.mean(result)
 
     print('Time for MC threshold estimation : {}'.format(time()-time0))
     print('Estimated threshold : {}'.format(estimated_threshold))
     return estimated_threshold
+
 
 if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
