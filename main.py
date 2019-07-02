@@ -9,8 +9,9 @@ import matplotlib.pyplot as plt
 matplotlib.use('TkAgg')
 from time import time
 from tools import pool_computing, print_percent
-import ray
+# import ray
 import multiprocessing
+from joblib import Parallel, delayed
 
 
 input_path = 'minimal/'
@@ -153,7 +154,7 @@ def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
     brain_map = gaussian_filter(brain_map, sigma=sigma)
     return np.max(brain_map)
 
-@ray.remote
+# @ray.remote
 def simulate_N_maps_ray(N_sim, kwargs):
     '''
         Equivalent to simulate_max_peaks function called N_sim times.
@@ -210,6 +211,35 @@ def estimate_threshold_monte_carlo_ray(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulatio
     print('Estimated threshold : {}'.format(estimated_threshold))
     return estimated_threshold
 
+
+def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
+    '''
+        Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
+    '''
+    time0 = time()
+    nb_processes=multiprocessing.cpu_count()//2
+    # ray.init(num_cpus=nb_processes)
+
+    kwargs = {
+        'Ni': Ni,
+        'Nj': Nj,
+        'Nk': Nk,
+        'sigma': sigma,
+        'n_peaks': n_peaks
+    }
+
+    n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
+    
+    # result = ray.get([simulate_N_maps_ray.remote(n, kwargs) for n in n_list])
+
+    result = Parallel(n_jobs=nb_processes)(delayed(simulate_N_maps_ray)(n, kwargs) for n in n_list)
+
+    estimated_threshold = np.mean(result)
+
+    print('Time for MC threshold estimation : {}'.format(time()-time0))
+    print('Estimated threshold : {}'.format(estimated_threshold))
+    return estimated_threshold
+
 if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
     # pmid = 22266924 
@@ -223,5 +253,5 @@ if __name__ == '__main__':
     stat_img, hist_img, nb_peaks = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=True)
     print('Nb peaks : {}'.format(nb_peaks))
 
-    threshold = estimate_threshold_monte_carlo_ray(nb_peaks, Ni, Nj, Nk, N_simulations=5000, sigma=sigma)
+    threshold = estimate_threshold_monte_carlo_joblib(nb_peaks, Ni, Nj, Nk, N_simulations=5000, sigma=sigma)
     plot_activity_map(hist_img, glass_brain=False, threshold=threshold)
