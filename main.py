@@ -211,6 +211,9 @@ def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simula
 
 @mem.cache
 def build_covariance_matrix_from_keyword(keyword, sigma=2.):
+    '''
+        Build empirical covariance matrix of the voxel of the activity map associated to the given keyword
+    '''
     time0 = time()
     corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
 
@@ -237,13 +240,11 @@ def build_covariance_matrix_from_keyword(keyword, sigma=2.):
             i, j, k = np.minimum(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
             stat_img_data[i, j, k] += 1
         
-        # Add gaussian blurr
+        # With gaussian blurr, sparse calculation isn't efficient (not enough zeros)
         # stat_img_data = gaussian_filter(stat_img_data, sigma=sigma, truncate=1.)
 
         observations[i, :] = stat_img_data.flatten()
 
-    print(observations)
-    print(observations.shape)
 
     s_X = scipy.sparse.csr_matrix(observations)
     s_Ones = scipy.sparse.csr_matrix(np.ones(n_observations))
@@ -252,19 +253,9 @@ def build_covariance_matrix_from_keyword(keyword, sigma=2.):
     M2 = (s_Ones.dot(s_X)).transpose()
     M3 = s_Ones.dot(s_X)
 
-    print(M2)
-
     s_cov_matrix = M1/n_observations - M2.dot(M3)/(n_observations**2)
 
-
-    # print(sparse_observations)
-
-    # print(s_cov_matrix)
-
     return s_cov_matrix
-
-    # return np.cov(observations)
-    # return np.cov(observations)
 
 if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
