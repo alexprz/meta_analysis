@@ -8,13 +8,14 @@ import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('TkAgg')
 from time import time
-from tools import pool_computing, print_percent
+from tools import print_percent
 import multiprocessing
 from joblib import Parallel, delayed, Memory
+from globals import encode_feature, encode_pmid, decode_feature, decode_pmid, input_path, mem
 
-input_path = 'minimal/'
-cache_dir = 'cache_joblib'
-mem = Memory(cache_dir)
+# input_path = 'minimal/'
+# cache_dir = 'cache_joblib'
+# mem = Memory(cache_dir)
 
 # Loading MNI152 background and parameters (shape, affine...)
 bg_img = datasets.load_mni152_template()
@@ -60,23 +61,23 @@ def plot_activity_map(stat_img, threshold=0.1, glass_brain=False):
         plotting.plot_stat_map(stat_img, black_bg=True, threshold=threshold)#*np.max(stat_img.get_data()))#, threshold=threshold)#threshold*np.max(stat_img.get_data()))
     plotting.show()
 
-def build_index(file_name):
-    '''
-        Build decode & encode dictionnary of the given file_name.
+# def build_index(file_name):
+#     '''
+#         Build decode & encode dictionnary of the given file_name.
 
-        encode : dict
-            key : line number
-            value : string at the specified line number
-        decode : dict (reverse of encode)
-            key : string found in the file
-            value : number of the line containing the string
+#         encode : dict
+#             key : line number
+#             value : string at the specified line number
+#         decode : dict (reverse of encode)
+#             key : string found in the file
+#             value : number of the line containing the string
 
-        Used for the files pmids.txt & feature_names.txt
-    '''
-    decode = dict(enumerate(line.strip() for line in open(input_path+file_name)))
-    encode = {v: k for k, v in decode.items()}
+#         Used for the files pmids.txt & feature_names.txt
+#     '''
+#     decode = dict(enumerate(line.strip() for line in open(input_path+file_name)))
+#     encode = {v: k for k, v in decode.items()}
     
-    return encode, decode
+#     return encode, decode
 
 def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
     '''
@@ -93,8 +94,8 @@ def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
     time0 = time()
     corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
 
-    encode_feature, decode_feature = build_index('feature_names.txt')
-    encode_pmid, decode_pmid = build_index('pmids.txt')
+    # encode_feature, decode_feature = build_index('feature_names.txt')
+    # encode_pmid, decode_pmid = build_index('pmids.txt')
     
     feature_id = encode_feature[keyword]
 
@@ -217,8 +218,8 @@ def build_covariance_matrix_from_keyword(keyword, sigma=2.):
     time0 = time()
     corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
 
-    encode_feature, decode_feature = build_index('feature_names.txt')
-    encode_pmid, decode_pmid = build_index('pmids.txt')
+    # encode_feature, decode_feature = build_index('feature_names.txt')
+    # encode_pmid, decode_pmid = build_index('pmids.txt')
     
     feature_id = encode_feature[keyword]
 
