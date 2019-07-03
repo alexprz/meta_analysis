@@ -1,4 +1,4 @@
-
+from globals import mem
 # import numpy as np
 # import multiprocessing
 
@@ -35,6 +35,7 @@ def print_percent(index, total, prefix='', rate=10000):
     if (total//rate) == 0 or index % (total//rate) == 0:
         print(prefix+str(round(100*index/total, 1))+'%')
 
+@mem.cache
 def build_index(file_path):
     '''
         Build decode & encode dictionnary of the given file_name.

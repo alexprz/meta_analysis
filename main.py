@@ -10,8 +10,10 @@ matplotlib.use('TkAgg')
 from time import time
 from tools import print_percent
 import multiprocessing
-from joblib import Parallel, delayed, Memory
-from globals import encode_feature, encode_pmid, decode_feature, decode_pmid, input_path, mem
+from joblib import Parallel, delayed
+
+from globals import input_path, mem
+from builds import encode_feature, encode_pmid, decode_feature, decode_pmid
 
 # input_path = 'minimal/'
 # cache_dir = 'cache_joblib'
