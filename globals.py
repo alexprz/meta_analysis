@@ -1,4 +1,3 @@
-# from tools import build_index
 from joblib import Memory
 from nilearn import datasets, masking
 import numpy as np

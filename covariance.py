@@ -10,17 +10,12 @@ def build_covariance_matrix_from_keyword(keyword, sigma=2.):
         Build empirical covariance matrix of the voxel of the activity map associated to the given keyword
     '''
     time0 = time()
-    # corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
 
-    # encode_feature, decode_feature = build_index('feature_names.txt')
-    # encode_pmid, decode_pmid = build_index('pmids.txt')
-    
     feature_id = encode_feature[keyword]
 
     print('Get nonzero pmid')
     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
 
-    # coordinates = pd.read_csv(input_path+'coordinates.csv')
     stat_img_data = np.zeros((Ni,Nj,Nk)) # Building blank stat_img with MNI152's shape
 
     n_observations = len(nonzero_pmids)
