@@ -25,7 +25,7 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
     # Change box size according to reduce factor
     Ni_r, Nj_r, Nk_r = np.ceil(np.array((Ni, Nj, Nk))/reduce).astype(int)
 
-    stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
+    # stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
     n_observations = len(nonzero_pmids)
     n_voxels = Ni_r*Nj_r*Nk_r
 
@@ -54,6 +54,8 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
     inv_affine_r = np.linalg.inv(affine_r)
 
     for i, pmid in enumerate(nonzero_pmids):
+        stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
+
         # For each coordinates found in pmid (in mm), compute its corresponding voxels coordinates
         # and note it as activated
         print('{} out of {}'.format(i, n_observations))
