@@ -1,6 +1,8 @@
 from time import time
 import numpy as np
 import scipy
+import seaborn as sns
+from matplotlib import pyplot as plt
 
 from globals import mem, coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine
 from builds import encode_pmid, encode_feature, decode_pmid, decode_feature
@@ -58,6 +60,11 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
 
     return s_cov_matrix, affine_r
 
+def plot_matrix(M):
+    sns.heatmap(M)
+    plt.show()
+
+
 
 if __name__ == '__main__':
     keyword = 'prosopagnosia'
@@ -66,3 +73,8 @@ if __name__ == '__main__':
     cov_matrix, affine_r = build_covariance_matrix_from_keyword(keyword, sigma=sigma, reduce=10)
     print(cov_matrix)
     print(cov_matrix.shape)
+
+    cov_array = cov_matrix.toarray() 
+    print(np.percentile(cov_array, .9999))
+    print(len(cov_array[cov_array > 0]))
+    plot_matrix(cov_array)
