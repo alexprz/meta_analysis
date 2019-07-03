@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from nilearn import datasets, plotting, masking
+from nilearn import plotting
 from scipy.ndimage import gaussian_filter
 import scipy.sparse
 import nibabel as nib
@@ -12,19 +12,19 @@ from tools import print_percent
 import multiprocessing
 from joblib import Parallel, delayed
 
-from globals import input_path, mem
+from globals import input_path, mem, bg_img, gray_mask, Ni, Nj, Nk, affine, inv_affine, coordinates, corpus_tfidf
 from builds import encode_feature, encode_pmid, decode_feature, decode_pmid
 
 # input_path = 'minimal/'
 # cache_dir = 'cache_joblib'
 # mem = Memory(cache_dir)
 
-# Loading MNI152 background and parameters (shape, affine...)
-bg_img = datasets.load_mni152_template()
-gray_mask = masking.compute_gray_matter_mask(bg_img)
-Ni, Nj, Nk = bg_img.shape
-affine = bg_img.affine
-inv_affine = np.linalg.inv(affine)
+# # Loading MNI152 background and parameters (shape, affine...)
+# bg_img = datasets.load_mni152_template()
+# gray_mask = masking.compute_gray_matter_mask(bg_img)
+# Ni, Nj, Nk = bg_img.shape
+# affine = bg_img.affine
+# inv_affine = np.linalg.inv(affine)
 
 
 def build_activity_map_from_pmid(pmid, sigma=1):
@@ -35,15 +35,16 @@ def build_activity_map_from_pmid(pmid, sigma=1):
         sigma : std used in gaussian blurr
     '''
 
-    coordinates = pd.read_csv(input_path+'coordinates.csv')
+    # coordinates = pd.read_csv(input_path+'coordinates.csv')
     stat_img_data = np.zeros((Ni,Nj,Nk)) # Building blank stat_img with MNI152's shape
 
     # For each coordinates found in pmid (in mm), compute its corresponding voxels coordinates
     # and note it as activated
     for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
         x, y, z = row['x'], row['y'], row['z']
-        i, j, k, _ = np.rint(np.dot(inv_affine, [x, y, z, 1])).astype(int)
-        stat_img_data[i, j, k] = 1
+        # i, j, k, _ = np.rint(np.dot(inv_affine, [x, y, z, 1])).astype(int)
+        i, j, k = np.minimum(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
+        stat_img_data[i, j, k] += 1
         
     # Add gaussian blurr
     stat_img_data = gaussian_filter(stat_img_data, sigma=sigma)
@@ -94,7 +95,7 @@ def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
         n_sample : nb of total peaks (inside and outside gray matter)
     '''
     time0 = time()
-    corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
+    # corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
 
     # encode_feature, decode_feature = build_index('feature_names.txt')
     # encode_pmid, decode_pmid = build_index('pmids.txt')
@@ -104,7 +105,7 @@ def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
     print('Get nonzero pmid')
     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
 
-    coordinates = pd.read_csv(input_path+'coordinates.csv')
+    # coordinates = pd.read_csv(input_path+'coordinates.csv')
     stat_img_data = np.zeros((Ni,Nj,Nk)) # Building blank img with MNI152's shape
     hist_img_data = np.zeros((Ni,Nj,Nk)) # Building blank img with MNI152's shape
     
@@ -218,7 +219,7 @@ def build_covariance_matrix_from_keyword(keyword, sigma=2.):
         Build empirical covariance matrix of the voxel of the activity map associated to the given keyword
     '''
     time0 = time()
-    corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
+    # corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
 
     # encode_feature, decode_feature = build_index('feature_names.txt')
     # encode_pmid, decode_pmid = build_index('pmids.txt')
@@ -228,7 +229,7 @@ def build_covariance_matrix_from_keyword(keyword, sigma=2.):
     print('Get nonzero pmid')
     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
 
-    coordinates = pd.read_csv(input_path+'coordinates.csv')
+    # coordinates = pd.read_csv(input_path+'coordinates.csv')
     stat_img_data = np.zeros((Ni,Nj,Nk)) # Building blank stat_img with MNI152's shape
 
     n_observations = len(nonzero_pmids)
@@ -264,7 +265,7 @@ if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
     # pmid = 22266924 
     # stat_img = build_activity_map_from_pmid(pmid, sigma=1.5)
-    # plot_activity_map(stat_img, glass_brain=True)
+    # plot_activity_map(stat_img, glass_brain=True, threshold=0.)
 
 
     # Step 2
@@ -273,7 +274,7 @@ if __name__ == '__main__':
     # stat_img, hist_img, nb_peaks = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=True)
     # print('Nb peaks : {}'.format(nb_peaks))
 
-    # threshold = estimate_threshold_monte_carlo_joblib(nb_peaks, Ni, Nj, Nk, N_simulations=5000, sigma=sigma)
+    # threshold = estimate_threshold_monte_carlo_joblib(nb_peaks, Ni, Nj, Nk, N_simulations=100, sigma=sigma)
     # plot_activity_map(hist_img, glass_brain=False, threshold=threshold)
 
     # Step 3 : Covariance matrix between voxels
