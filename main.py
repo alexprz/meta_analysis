@@ -15,6 +15,8 @@ from joblib import Parallel, delayed
 from globals import input_path, mem, bg_img, gray_mask, Ni, Nj, Nk, affine, inv_affine, coordinates, corpus_tfidf
 from builds import encode_feature, encode_pmid, decode_feature, decode_pmid
 
+import covariance as cov
+
 # input_path = 'minimal/'
 # cache_dir = 'cache_joblib'
 # mem = Memory(cache_dir)
@@ -213,53 +215,53 @@ def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simula
     print('Estimated threshold : {}'.format(estimated_threshold))
     return estimated_threshold
 
-@mem.cache
-def build_covariance_matrix_from_keyword(keyword, sigma=2.):
-    '''
-        Build empirical covariance matrix of the voxel of the activity map associated to the given keyword
-    '''
-    time0 = time()
-    # corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
+# @mem.cache
+# def build_covariance_matrix_from_keyword(keyword, sigma=2.):
+#     '''
+#         Build empirical covariance matrix of the voxel of the activity map associated to the given keyword
+#     '''
+#     time0 = time()
+#     # corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
 
-    # encode_feature, decode_feature = build_index('feature_names.txt')
-    # encode_pmid, decode_pmid = build_index('pmids.txt')
+#     # encode_feature, decode_feature = build_index('feature_names.txt')
+#     # encode_pmid, decode_pmid = build_index('pmids.txt')
     
-    feature_id = encode_feature[keyword]
+#     feature_id = encode_feature[keyword]
 
-    print('Get nonzero pmid')
-    nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
+#     print('Get nonzero pmid')
+#     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
 
-    # coordinates = pd.read_csv(input_path+'coordinates.csv')
-    stat_img_data = np.zeros((Ni,Nj,Nk)) # Building blank stat_img with MNI152's shape
+#     # coordinates = pd.read_csv(input_path+'coordinates.csv')
+#     stat_img_data = np.zeros((Ni,Nj,Nk)) # Building blank stat_img with MNI152's shape
 
-    n_observations = len(nonzero_pmids)
-    observations = np.zeros((n_observations, Ni*Nj*Nk))
+#     n_observations = len(nonzero_pmids)
+#     observations = np.zeros((n_observations, Ni*Nj*Nk))
 
-    for i, pmid in enumerate(nonzero_pmids):
-        # For each coordinates found in pmid (in mm), compute its corresponding voxels coordinates
-        # and note it as activated
-        print('{} out of {}'.format(i, n_observations))
-        for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
-            x, y, z = row['x'], row['y'], row['z']
-            i, j, k = np.minimum(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
-            stat_img_data[i, j, k] += 1
+#     for i, pmid in enumerate(nonzero_pmids):
+#         # For each coordinates found in pmid (in mm), compute its corresponding voxels coordinates
+#         # and note it as activated
+#         print('{} out of {}'.format(i, n_observations))
+#         for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+#             x, y, z = row['x'], row['y'], row['z']
+#             i, j, k = np.minimum(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
+#             stat_img_data[i, j, k] += 1
         
-        # With gaussian blurr, sparse calculation isn't efficient (not enough zeros)
-        # stat_img_data = gaussian_filter(stat_img_data, sigma=sigma, truncate=1.)
+#         # With gaussian blurr, sparse calculation isn't efficient (not enough zeros)
+#         # stat_img_data = gaussian_filter(stat_img_data, sigma=sigma, truncate=1.)
 
-        observations[i, :] = stat_img_data.flatten()
+#         observations[i, :] = stat_img_data.flatten()
 
 
-    s_X = scipy.sparse.csr_matrix(observations)
-    s_Ones = scipy.sparse.csr_matrix(np.ones(n_observations))
+#     s_X = scipy.sparse.csr_matrix(observations)
+#     s_Ones = scipy.sparse.csr_matrix(np.ones(n_observations))
 
-    M1 = s_X.transpose().dot(s_X)
-    M2 = (s_Ones.dot(s_X)).transpose()
-    M3 = s_Ones.dot(s_X)
+#     M1 = s_X.transpose().dot(s_X)
+#     M2 = (s_Ones.dot(s_X)).transpose()
+#     M3 = s_Ones.dot(s_X)
 
-    s_cov_matrix = M1/n_observations - M2.dot(M3)/(n_observations**2)
+#     s_cov_matrix = M1/n_observations - M2.dot(M3)/(n_observations**2)
 
-    return s_cov_matrix
+#     return s_cov_matrix
 
 if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
@@ -270,7 +272,7 @@ if __name__ == '__main__':
 
     # Step 2
     keyword = 'prosopagnosia'
-    sigma = 2
+    sigma = 2.
     # stat_img, hist_img, nb_peaks = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=True)
     # print('Nb peaks : {}'.format(nb_peaks))
 
@@ -278,4 +280,4 @@ if __name__ == '__main__':
     # plot_activity_map(hist_img, glass_brain=False, threshold=threshold)
 
     # Step 3 : Covariance matrix between voxels
-    print(build_covariance_matrix_from_keyword(keyword, sigma=sigma))
+    print(cov.build_covariance_matrix_from_keyword(keyword, sigma=sigma))
