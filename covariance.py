@@ -3,6 +3,9 @@ import numpy as np
 import scipy
 import seaborn as sns
 from matplotlib import pyplot as plt
+from nilearn import plotting
+import matplotlib
+matplotlib.use('TkAgg')
 
 from globals import mem, coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine
 from builds import encode_pmid, encode_feature, decode_pmid, decode_feature
@@ -24,7 +27,24 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
 
     stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
     n_observations = len(nonzero_pmids)
-    observations = np.zeros((n_observations, Ni_r*Nj_r*Nk_r))
+    n_voxels = Ni_r*Nj_r*Nk_r
+
+    coords = np.zeros((Ni_r, Nj_r, Nk_r, 3)).astype(int)
+
+    for k in range(Ni_r):
+         coords[k, :, :, 0] = k
+    for k in range(Nj_r):
+         coords[:, k, :, 1] = k
+    for k in range(Nk_r):
+         coords[:, :, k, 2] = k
+
+    print(coords)
+
+    coords = coords.reshape(-1, 3)
+
+    print(coords)
+
+    observations = np.zeros((n_observations, n_voxels))
 
     # Change affine to new box size
     affine_r = np.copy(affine)
@@ -46,7 +66,7 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
         if gaussian_filter:
             stat_img_data = scipy.ndimage.gaussian_filter(stat_img_data, sigma=sigma)
 
-        observations[i, :] = stat_img_data.flatten()
+        observations[i, :] = stat_img_data.reshape(-1)
 
     # Sparse computation of covariance matrix
     s_X = scipy.sparse.csr_matrix(observations)
@@ -58,23 +78,41 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
 
     s_cov_matrix = M1/n_observations - M2.dot(M3)/(n_observations**2)
 
-    return s_cov_matrix, affine_r
+    return s_cov_matrix, coords, affine_r
 
-def plot_matrix(M):
+def plot_matrix_heatmap(M):
     sns.heatmap(M)
+    plt.show()
+
+def plot_cov_matrix_brain(M, coords, affine):
+    coords_world = np.zeros(coords.shape)
+
+    # print(affine)
+
+    for k in range(coords.shape[0]):
+        coords_world[k, :] = np.dot(affine, [coords[k, 0], coords[k, 1], coords[k, 2], 1])[:-1]
+        # print(coords_world[k, :])
+
+    edge_threshold = np.max(M)*0.1
+    plotting.plot_connectome(M, coords_world, node_size=5, node_color='black', edge_threshold=edge_threshold)
     plt.show()
 
 
 
 if __name__ == '__main__':
-    keyword = 'prosopagnosia'
+    keyword = 'memory'
+    # keyword = 'prosopagnosia'
     sigma = 2.
 
-    cov_matrix, affine_r = build_covariance_matrix_from_keyword(keyword, sigma=sigma, reduce=10)
+    cov_matrix, coords, affine_r = build_covariance_matrix_from_keyword(keyword, sigma=sigma, reduce=5, gaussian_filter=False)
     print(cov_matrix)
     print(cov_matrix.shape)
 
     cov_array = cov_matrix.toarray() 
-    print(np.percentile(cov_array, .9999))
-    print(len(cov_array[cov_array > 0]))
-    plot_matrix(cov_array)
+    # print(np.percentile(cov_array, .9999))
+    # print(len(cov_array[cov_array > 0]))
+    # plot_matrix_heatmap(cov_array)
+
+    print('Plotting')
+    plot_cov_matrix_brain(cov_array, coords, affine_r)
+
