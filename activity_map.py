@@ -3,8 +3,6 @@ import nibabel as nib
 from nilearn import plotting
 from scipy.ndimage import gaussian_filter
 from time import time
-import matplotlib
-matplotlib.use('TkAgg')
 
 from globals import Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
