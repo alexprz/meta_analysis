@@ -10,7 +10,7 @@ from tools import print_percent, empirical_cov_matrix
 
 def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
     '''
-        Simulate a map under the null hypothesis and smooth it with a gaussian blurr (ALE method)
+        Simulate a map under the null hypothesis and smooth it with a gaussian kernel (ALE method)
         Return the max encountered.
     '''
     brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
@@ -24,9 +24,10 @@ def simulate_N_maps_joblib(N_sim, kwargs):
         (Used for multiprocessing with joblib)
     '''
     peaks = np.zeros(N_sim)
+    n_peaks, Ni, Nj, Nk, sigma = kwargs['n_peaks'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma']
     for k in range(N_sim):
-        peaks[k] = simulate_max_peaks(kwargs['n_peaks'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma'])
-        print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(kwargs['n_peaks']))
+        peaks[k] = simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma)
+        print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(n_peaks))
     return peaks
 
 def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
@@ -53,7 +54,7 @@ def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simula
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''
     time0 = time()
-    nb_processes=multiprocessing.cpu_count()//2
+    nb_processes=multiprocessing.cpu_count()-1
 
     kwargs = {
         'Ni': Ni,
@@ -65,7 +66,7 @@ def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simula
 
     n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
 
-    result = Parallel(n_jobs=nb_processes)(delayed(simulate_N_maps_joblib)(n, kwargs) for n in n_list)
+    result = Parallel(n_jobs=nb_processes, backend='multiprocessing')(delayed(simulate_N_maps_joblib)(n, kwargs) for n in n_list)
 
     estimated_threshold = np.mean(result)
 
@@ -117,6 +118,6 @@ def estimate_threshold_covariance(n_peaks, Ni, Nj, Nk, N_simulations=5000, apply
 
 if __name__ == '__main__':
     nb_peaks = 2798
-    sigma = 2.
+    sigma = 1.5
     # print(estimate_threshold_monte_carlo_joblib(nb_peaks, Ni, Nj, Nk, N_simulations=100, sigma=sigma))
     print(estimate_threshold_covariance(nb_peaks, Ni//10, Nj//10, Nk//10, N_simulations=5000, sigma=sigma))
