@@ -2,13 +2,14 @@ from time import time
 import numpy as np
 import scipy
 import seaborn as sns
-from matplotlib import pyplot as plt
 from nilearn import plotting
-import matplotlib
-matplotlib.use('TkAgg')
+from matplotlib import pyplot as plt
+
+from joblib import Parallel, delayed
 
 from globals import mem, coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine
 from builds import encode_pmid, encode_feature, decode_pmid, decode_feature
+from tools import print_percent
 
 @mem.cache
 def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2., reduce=2):
@@ -38,11 +39,11 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
     for k in range(Nk_r):
          coords[:, :, k, 2] = k
 
-    print(coords)
+    # print(coords)
 
     coords = coords.reshape(-1, 3)
 
-    print(coords)
+    # print(coords)
 
     observations = np.zeros((n_observations, n_voxels))
 
@@ -53,22 +54,55 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
 
     inv_affine_r = np.linalg.inv(affine_r)
 
-    for i, pmid in enumerate(nonzero_pmids):
-        stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
+    def compute_map(pmid_enumerate):
+        n_tot = len(pmid_enumerate)
+        observations_ = np.zeros((n_tot, n_voxels))
+        p = 0
+        for obs_index, pmid in pmid_enumerate:
+            stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
 
-        # For each coordinates found in pmid (in mm), compute its corresponding voxels coordinates
-        # and note it as activated
-        print('{} out of {}'.format(i, n_observations))
-        for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
-            x, y, z = row['x'], row['y'], row['z']
-            i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
-            stat_img_data[i, j, k] += 1
-        
-        # With gaussian blurr, sparse calculation may not be efficient (not enough zeros)
-        if gaussian_filter:
-            stat_img_data = scipy.ndimage.gaussian_filter(stat_img_data, sigma=sigma)
+            # For each coordinates found in pmid (in mm), compute its corresponding voxels coordinates
+            # and note it as activated
+            # print('{} out of {}'.format(obs_index, n_observations))
+            print_percent(p, n_tot)
+            for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+                x, y, z = row['x'], row['y'], row['z']
+                i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
+                stat_img_data[i, j, k] += 1
+            
+            # With gaussian blurr, sparse calculation may not be efficient (not enough zeros)
+            if gaussian_filter:
+                stat_img_data = scipy.ndimage.gaussian_filter(stat_img_data, sigma=sigma)
 
-        observations[i, :] = stat_img_data.reshape(-1)
+            reshaped = stat_img_data.reshape(-1)
+            observations_[p, :] = reshaped
+            # observations[obs_index, :] = reshaped
+            p += 1
+
+        return observations_
+
+        # return stat_img_data.reshape(-1)s
+    n_jobs = 8
+
+    # observations = compute_map(list(enumerate(nonzero_pmids)))
+    # compute_map(list(enumerate(nonzero_pmids)))
+
+    splitted_array = np.array_split(np.array(list(enumerate(nonzero_pmids))), n_jobs)
+    # print(np.array_split(np.array(list(enumerate(nonzero_pmids))), n_jobs))
+    # print(splitted_array)
+    results = []
+    # for sub_array in splitted_array:
+    #     results.append(compute_map(sub_array))
+        # for i, pmid in sub_array:
+        #     compute_map(i, pmid)
+    # observations = np.concatenate(results, axis=0)
+
+    # Parallel(n_jobs=8, require='sharedmem')(compute_map(i, pmid) for i, pmid in enumerate(nonzero_pmids))
+    observations = np.concatenate(Parallel(n_jobs=n_jobs)(delayed(compute_map)(sub_array) for sub_array in splitted_array), axis=0)
+
+    print(observations)
+    # print(observations.shape)
+
 
     # Sparse computation of covariance matrix
     s_X = scipy.sparse.csr_matrix(observations)
