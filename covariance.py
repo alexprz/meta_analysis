@@ -9,12 +9,26 @@ from joblib import Parallel, delayed
 
 from globals import mem, coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine
 from builds import encode_pmid, encode_feature, decode_pmid, decode_feature
-from tools import print_percent
+from tools import print_percent, empirical_cov_matrix
+from threshold import estimate_threshold_covariance
+
+# def empirical_cov_matrix(observations):
+#     n_observations = observations.shape[0]
+
+#     s_X = scipy.sparse.csr_matrix(observations)
+#     s_Ones = scipy.sparse.csr_matrix(np.ones(n_observations))
+
+#     M1 = s_X.transpose().dot(s_X)
+#     M2 = (s_Ones.dot(s_X)).transpose()
+#     M3 = s_Ones.dot(s_X)
+
+#     return M1/n_observations - M2.dot(M3)/(n_observations**2)
 
 
 def compute_map(pmid_enumerate, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussian_filter):
     n_tot = len(pmid_enumerate)
     observations_ = np.zeros((n_tot, n_voxels))
+    counts = np.zeros(n_tot).astype(int)
     p = 0
     for obs_index, pmid in pmid_enumerate:
         stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
@@ -26,7 +40,8 @@ def compute_map(pmid_enumerate, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussi
             x, y, z = row['x'], row['y'], row['z']
             i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
             stat_img_data[i, j, k] += 1
-        
+            counts[p] += 1
+
         # With gaussian kernel, sparse calculation may not be efficient (not enough zeros)
         if gaussian_filter:
             stat_img_data = scipy.ndimage.gaussian_filter(stat_img_data, sigma=sigma)
@@ -34,7 +49,7 @@ def compute_map(pmid_enumerate, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussi
         observations_[p, :] = stat_img_data.reshape(-1)
         p += 1
 
-    return observations_
+    return observations_, counts
 
 @mem.cache
 def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2., reduce=2):
@@ -71,26 +86,31 @@ def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2
 
     n_jobs = multiprocessing.cpu_count()-1
     splitted_array = np.array_split(np.array(list(enumerate(nonzero_pmids))), n_jobs)
-    observations = np.concatenate(Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_map)(sub_array, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussian_filter) for sub_array in splitted_array), axis=0)
+    observations, counts = zip(*Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_map)(sub_array, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussian_filter) for sub_array in splitted_array))
 
+    observations = np.concatenate(observations, axis=0)
+    counts = np.concatenate(counts, axis=0)
+    
+    avg_n_peaks = np.mean(counts)
 
     # Sparse computation of covariance matrix
-    s_X = scipy.sparse.csr_matrix(observations)
-    s_Ones = scipy.sparse.csr_matrix(np.ones(n_observations))
+    # s_X = scipy.sparse.csr_matrix(observations)
+    # s_Ones = scipy.sparse.csr_matrix(np.ones(n_observations))
 
-    M1 = s_X.transpose().dot(s_X)
-    M2 = (s_Ones.dot(s_X)).transpose()
-    M3 = s_Ones.dot(s_X)
+    # M1 = s_X.transpose().dot(s_X)
+    # M2 = (s_Ones.dot(s_X)).transpose()
+    # M3 = s_Ones.dot(s_X)
 
-    s_cov_matrix = M1/n_observations - M2.dot(M3)/(n_observations**2)
+    # s_cov_matrix = M1/n_observations - M2.dot(M3)/(n_observations**2)
+    s_cov_matrix = empirical_cov_matrix(observations)
 
-    return s_cov_matrix, coords, affine_r
+    return s_cov_matrix, coords, affine_r, avg_n_peaks
 
 def plot_matrix_heatmap(M):
     sns.heatmap(M)
     plt.show()
 
-def plot_cov_matrix_brain(M, coords, affine):
+def plot_cov_matrix_brain(M, coords, affine, threshold):
     coords_world = np.zeros(coords.shape)
 
     # print(affine)
@@ -99,8 +119,9 @@ def plot_cov_matrix_brain(M, coords, affine):
         coords_world[k, :] = np.dot(affine, [coords[k, 0], coords[k, 1], coords[k, 2], 1])[:-1]
         # print(coords_world[k, :])
 
-    edge_threshold = np.max(M)*0.1
-    plotting.plot_connectome(M, coords_world, node_size=5, node_color='black', edge_threshold=edge_threshold)
+    # threshold = np.max(M)*0.1
+    # print(threshold)
+    plotting.plot_connectome(M, coords_world, node_size=5, node_color='black', edge_threshold=threshold)
     plt.show()
 
 
@@ -109,8 +130,9 @@ if __name__ == '__main__':
     keyword = 'memory'
     # keyword = 'prosopagnosia'
     sigma = 2.
+    reduce = 10
 
-    cov_matrix, coords, affine_r = build_covariance_matrix_from_keyword(keyword, sigma=sigma, reduce=5, gaussian_filter=False)
+    cov_matrix, coords, affine_r, avg_n_peaks = build_covariance_matrix_from_keyword(keyword, sigma=sigma, reduce=reduce, gaussian_filter=False)
     print(cov_matrix)
     print(cov_matrix.shape)
 
@@ -119,6 +141,10 @@ if __name__ == '__main__':
     # print(len(cov_array[cov_array > 0]))
     # plot_matrix_heatmap(cov_array)
 
+    threshold = estimate_threshold_covariance(avg_n_peaks, Ni//reduce, Nj//reduce, Nk//reduce, N_simulations=1000, sigma=sigma, apply_gaussian_filter=False)
+    print('Avg peaks : {}'.format(avg_n_peaks))
+    print('Threshold : {}'.format(threshold))
     print('Plotting')
-    plot_cov_matrix_brain(cov_array, coords, affine_r)
+    # threshold = '25%'
+    plot_cov_matrix_brain(cov_array, coords, affine_r, threshold)
 
