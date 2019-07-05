@@ -155,7 +155,7 @@ def compute_maps(pmids, Ni, Nj, Nk, inv_affine):
         print_percent(count, n_pmids, prefix='Building maps associated to {} '.format(keyword))
         for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
             x, y, z = row['x'], row['y'], row['z']
-            i, j, k = np.minimum(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
+            i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
             p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
             maps[count, p] += 1
 
@@ -219,4 +219,6 @@ if __name__ == '__main__':
 
     # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
 
-    print(get_all_maps_associated_to_keyword(keyword)[0])
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=5)
+    print(maps)
+    print(Ni_r, Nj_r, Nk_r)
