@@ -135,7 +135,7 @@ def average_activity_map_by_keyword(keyword, sigma=1, gray_matter_mask=True):
 
     return avg_gauss_img, avg_img, n_samples
 
-def compute_maps(pmids, Ni, Nj, Nk, inv_affine):
+def compute_maps(pmids, Ni, Nj, Nk, inv_affine, keyword):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
         Used for multiprocessing in get_all_maps_associated_to_keyword function.
@@ -162,16 +162,16 @@ def compute_maps(pmids, Ni, Nj, Nk, inv_affine):
     return maps
 
 @mem.cache
-def get_all_maps_associated_to_keyword(keyword, gray_matter_mask=True, reduce=1):
+def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
-        gray_matter_mask : if True, only voxels inside gray_matter_mask are taken into account
+        gray_matter_mask : if True, only voxels inside gray_matter_mask are taken into account (NOT IMPLEMENTED YET)
         reduce : integer, reducing scale factor. Ex : if reduce=2, aggregates voxels every 2 voxels in each direction.
                 Notice that this affects the affine and box size.
 
         Returns 
-            maps: sparse CSR matrix of shape (n_pmids, n_voxels) containing all the related flattenned maps where
+            maps: sparse CSR matrix of shape (n_voxels, n_pmids) containing all the related flattenned maps where
                     n_pmids is the number of pmids related to the keyword
                     n_voxels is the number of voxels in the box (may have changed if reduce != 1)
             Ni_r, Nj_r, Nk_r: new box dimension (changed if reduce != 1)
@@ -195,10 +195,10 @@ def get_all_maps_associated_to_keyword(keyword, gray_matter_mask=True, reduce=1)
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()-1
     splitted_array = np.array_split(np.array(nonzero_pmids), n_jobs)
-    maps = scipy.sparse.vstack(Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine) for sub_array in splitted_array))
+    maps = scipy.sparse.vstack(Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine, keyword) for sub_array in splitted_array))
 
     # Converting to CSR format (more efficient for operations)
-    maps = scipy.sparse.csr_matrix(maps)
+    maps = scipy.sparse.csr_matrix(maps).transpose()
     return maps, Ni_r, Nj_r, Nk_r, affine_r
 
 
@@ -219,6 +219,7 @@ if __name__ == '__main__':
 
     # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
 
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=5)
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=1)
     print(maps)
+    print(maps.shape)
     print(Ni_r, Nj_r, Nk_r)
