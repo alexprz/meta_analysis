@@ -40,7 +40,6 @@ def empirical_cov_matrix(observations):
     return M1/n_observations - M2.dot(M3)/(n_observations**2)
 
 def index_3D_to_1D(i, j, k, Ni, Nj, Nk):
-    #...
     return i + Ni*j + Ni*Nj*k
 
 def index_1D_to_3D(p, Ni, Nj, Nk):
@@ -49,6 +48,26 @@ def index_1D_to_3D(p, Ni, Nj, Nk):
     j = p//Ni
     i = p%Ni
     return i, j, k
+
+def index_3D_to_1D_checked(i, j, k, Ni, Nj, Nk):
+    if i >= Ni or j >= Nj or k >= Nk or i < 0 or j < 0 or k < 0:
+        raise ValueError('Indices ({}, {}, {}) are outside box of size ({}, {}, {}).'.format(i, j, k, Ni, Nj, Nk))
+
+    if Ni == 0 or Nj == 0 or Nk == 0:
+        raise ValueError('Given box of size ({}, {}, {}) should not have a null side.'.format(Ni, Nj, Nk))
+
+    return index_3D_to_1D(i, j, k, Ni, Nj, Nk)
+
+def index_1D_to_3D_checked(p, Ni, Nj, Nk):
+    size = Ni*Nj*Nk
+    if p >= size or p < 0:
+        raise ValueError('Indice {} is outside vector of size {}*{}*{}={}.'.format(p, Ni, Nj, Nk, size))
+
+    if Ni == 0 or Nj == 0 or Nk == 0:
+        raise ValueError('Given box of size ({}, {}, {}) should not have a null side.'.format(Ni, Nj, Nk))
+
+    return index_1D_to_3D(p, Ni, Nj, Nk)
+
 
 if __name__ == '__main__':
     i, j, k = 3, 4, 5
