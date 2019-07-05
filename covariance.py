@@ -9,8 +9,9 @@ from joblib import Parallel, delayed
 
 from globals import mem, coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine
 from builds import encode_pmid, encode_feature, decode_pmid, decode_feature
-from tools import print_percent, empirical_cov_matrix
+from tools import print_percent, empirical_cov_matrix, map_to_data, data_to_img, map_to_img
 from threshold import estimate_threshold_covariance
+from activity_map import get_all_maps_associated_to_keyword, plot_activity_map
 
 # def empirical_cov_matrix(observations):
 #     n_observations = observations.shape[0]
@@ -24,6 +25,20 @@ from threshold import estimate_threshold_covariance
 
 #     return M1/n_observations - M2.dot(M3)/(n_observations**2)
 
+def average_activity_map(keyword, reduce=1):
+    '''
+        Builds the average map of the studies related to the keyword.
+
+        Returns a sparse CSR matrix of shape (n_pmids, 1) representing the flattened average map
+        where n_pmids is the number of pmid related to the keyword.
+    '''
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=reduce)
+    print(maps.shape)
+    _, n_pmids = maps.shape
+    e = scipy.sparse.csr_matrix(np.ones(n_pmids)/n_pmids).transpose()
+    print(e.shape)
+
+    return maps.dot(e), Ni_r, Nj_r, Nk_r, affine_r
 
 def compute_map(pmid_enumerate, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussian_filter):
     n_tot = len(pmid_enumerate)
@@ -125,6 +140,10 @@ def plot_cov_matrix_brain(M, coords, affine, threshold):
     plt.show()
 
 
+def variance_activity_map_by_keyword(keyword, sigma=2.):
+    pass
+
+
 
 if __name__ == '__main__':
     keyword = 'memory'
@@ -132,19 +151,32 @@ if __name__ == '__main__':
     sigma = 2.
     reduce = 10
 
-    cov_matrix, coords, affine_r, avg_n_peaks = build_covariance_matrix_from_keyword(keyword, sigma=sigma, reduce=reduce, gaussian_filter=False)
-    print(cov_matrix)
-    print(cov_matrix.shape)
+    # cov_matrix, coords, affine_r, avg_n_peaks = build_covariance_matrix_from_keyword(keyword, sigma=sigma, reduce=reduce, gaussian_filter=False)
+    # print(cov_matrix)
+    # print(cov_matrix.shape)
 
-    cov_array = cov_matrix.toarray() 
-    # print(np.percentile(cov_array, .9999))
-    # print(len(cov_array[cov_array > 0]))
-    # plot_matrix_heatmap(cov_array)
+    # cov_array = cov_matrix.toarray() 
+    # # print(np.percentile(cov_array, .9999))
+    # # print(len(cov_array[cov_array > 0]))
+    # # plot_matrix_heatmap(cov_array)
 
-    threshold = estimate_threshold_covariance(avg_n_peaks, Ni//reduce, Nj//reduce, Nk//reduce, N_simulations=1000, sigma=sigma, apply_gaussian_filter=False)
-    print('Avg peaks : {}'.format(avg_n_peaks))
-    print('Threshold : {}'.format(threshold))
-    print('Plotting')
-    # threshold = '25%'
-    plot_cov_matrix_brain(cov_array, coords, affine_r, threshold)
+    # threshold = estimate_threshold_covariance(avg_n_peaks, Ni//reduce, Nj//reduce, Nk//reduce, N_simulations=1000, sigma=sigma, apply_gaussian_filter=False)
+    # print('Avg peaks : {}'.format(avg_n_peaks))
+    # print('Threshold : {}'.format(threshold))
+    # print('Plotting')
+    # # threshold = '25%'
+    # plot_cov_matrix_brain(cov_array, coords, affine_r, threshold)
+
+    avg_map, Ni, Nj, Nk, affine = average_activity_map(keyword)
+    print(avg_map.shape)
+
+    avg_data = map_to_data(avg_map, Ni, Nj, Nk)
+
+    print(avg_data)
+
+    avg_img = data_to_img(avg_data, affine)
+
+    # plot_activity_map(avg_img)
+    plot_activity_map(map_to_img(avg_map, Ni, Nj, Nk, affine))
+
 
