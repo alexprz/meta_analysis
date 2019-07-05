@@ -15,7 +15,7 @@ from joblib import Parallel, delayed
 
 from globals import mem, Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
-from tools import print_percent, index_3D_to_1D, sum_from_maps, map_to_data, data_to_img
+from tools import print_percent, index_3D_to_1D, sum_from_maps, map_to_data, data_to_img, map_to_img
 
 matplotlib.use('TkAgg')
 print(matplotlib.get_backend())
@@ -58,68 +58,68 @@ def plot_activity_map(stat_img, threshold=0., glass_brain=False):
     plotting.show()
     plt.show()
 
-def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
-    '''
-        From the given keyword, build its metaanalysis activity map from all related pmids.
+# def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
+#     '''
+#         From the given keyword, build its metaanalysis activity map from all related pmids.
 
-        sigma : std of the gaussian blurr
-        gray_matter_mask : specify whether the map is restrained to the gray matter or not
+#         sigma : std of the gaussian blurr
+#         gray_matter_mask : specify whether the map is restrained to the gray matter or not
 
-        return (stat_img, hist_img, n_samples)
-        stat_img : Nifti1Image object, the map where frequencies are added for each activation
-        hist_img : Nifti1Image object, the map where 1 is added for each activation
-        n_samples : nb of pmids related to the keyword
-    '''
-    time0 = time()
+#         return (stat_img, hist_img, n_samples)
+#         stat_img : Nifti1Image object, the map where frequencies are added for each activation
+#         hist_img : Nifti1Image object, the map where 1 is added for each activation
+#         n_samples : nb of pmids related to the keyword
+#     '''
+#     time0 = time()
     
-    feature_id = encode_feature[keyword]
+#     feature_id = encode_feature[keyword]
 
-    print('Get nonzero pmid')
-    nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
-    n_samples = len(nonzero_pmids)
+#     print('Get nonzero pmid')
+#     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
+#     n_samples = len(nonzero_pmids)
 
-    freq_img_data = np.zeros((Ni,Nj,Nk)) # Building blank img with MNI152's shape
-    hist_img_data = np.zeros((Ni,Nj,Nk)) # Building blank img with MNI152's shape
+#     freq_img_data = np.zeros((Ni,Nj,Nk)) # Building blank img with MNI152's shape
+#     hist_img_data = np.zeros((Ni,Nj,Nk)) # Building blank img with MNI152's shape
     
-    print('Get nonzero coordinates')
-    nonzero_coordinates = coordinates.loc[coordinates['pmid'].isin(nonzero_pmids)]
-    print('Get pmid')
-    pmids = np.array(nonzero_coordinates['pmid'])
-    print('Build frequencies')
-    frequencies = np.array([corpus_tfidf[encode_pmid[str(pmid)], feature_id] for pmid in nonzero_coordinates['pmid']])
-    print(len(nonzero_coordinates))
-    n_peaks = len(nonzero_coordinates)
-    print('Build coords')
-    coord = np.zeros((n_peaks, 3))
-    coord[:, 0] = nonzero_coordinates['x']
-    coord[:, 1] = nonzero_coordinates['y']
-    coord[:, 2] = nonzero_coordinates['z']
+#     print('Get nonzero coordinates')
+#     nonzero_coordinates = coordinates.loc[coordinates['pmid'].isin(nonzero_pmids)]
+#     print('Get pmid')
+#     pmids = np.array(nonzero_coordinates['pmid'])
+#     print('Build frequencies')
+#     frequencies = np.array([corpus_tfidf[encode_pmid[str(pmid)], feature_id] for pmid in nonzero_coordinates['pmid']])
+#     print(len(nonzero_coordinates))
+#     n_peaks = len(nonzero_coordinates)
+#     print('Build coords')
+#     coord = np.zeros((n_peaks, 3))
+#     coord[:, 0] = nonzero_coordinates['x']
+#     coord[:, 1] = nonzero_coordinates['y']
+#     coord[:, 2] = nonzero_coordinates['z']
 
-    print('Build voxel coords')
-    voxel_coords = np.zeros((n_peaks, 3)).astype(int)
-    for k in range(n_peaks):
-        voxel_coords[k, :] = np.minimum(np.floor(np.dot(inv_affine, [coord[k, 0], coord[k, 1], coord[k, 2], 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
+#     print('Build voxel coords')
+#     voxel_coords = np.zeros((n_peaks, 3)).astype(int)
+#     for k in range(n_peaks):
+#         voxel_coords[k, :] = np.minimum(np.floor(np.dot(inv_affine, [coord[k, 0], coord[k, 1], coord[k, 2], 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
 
-    print('Building map')
-    for index, value in enumerate(voxel_coords):
-        i, j, k = value
-        hist_img_data[i, j, k] += 1
-        freq_img_data[i, j, k] += frequencies[index]
+#     print('Building map')
+#     for index, value in enumerate(voxel_coords):
+#         i, j, k = value
+#         hist_img_data[i, j, k] += 1
+#         freq_img_data[i, j, k] += frequencies[index]
     
 
-    if gray_matter_mask:
-        freq_img_data = np.ma.masked_array(freq_img_data, np.logical_not(gray_mask.get_data()))
-        hist_img_data = np.ma.masked_array(hist_img_data, np.logical_not(gray_mask.get_data()))
+#     if gray_matter_mask:
+#         freq_img_data = np.ma.masked_array(freq_img_data, np.logical_not(gray_mask.get_data()))
+#         hist_img_data = np.ma.masked_array(hist_img_data, np.logical_not(gray_mask.get_data()))
 
-    print('Building time : {}'.format(time()-time0))
-    freq_gauss_img_data = gaussian_filter(freq_img_data, sigma=sigma)
-    hist_gauss_img_data = gaussian_filter(hist_img_data, sigma=sigma)
+#     print('Building time : {}'.format(time()-time0))
+#     freq_gauss_img_data = gaussian_filter(freq_img_data, sigma=sigma)
+#     hist_gauss_img_data = gaussian_filter(hist_img_data, sigma=sigma)
 
-    freq_gauss_img = nib.Nifti1Image(freq_gauss_img_data, affine)
-    hist_gauss_img = nib.Nifti1Image(hist_gauss_img_data, affine)
-    hist_img = nib.Nifti1Image(hist_img_data, affine)
+#     freq_gauss_img = nib.Nifti1Image(freq_gauss_img_data, affine)
+#     hist_gauss_img = nib.Nifti1Image(hist_gauss_img_data, affine)
+#     hist_img = nib.Nifti1Image(hist_img_data, affine)
 
-    return freq_gauss_img, hist_gauss_img, hist_img, n_samples
+#     return freq_gauss_img, hist_gauss_img, hist_img, n_samples
 
 # def average_activity_map_by_keyword(keyword, sigma=1, gray_matter_mask=True):
 #     freq_gauss_img, hist_gauss_img, hist_img, n_samples = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=gray_matter_mask)
@@ -134,6 +134,21 @@ def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
 #     print(avg_img.get_data())
 
 #     return avg_gauss_img, avg_img, n_samples
+
+def build_activity_map_from_keyword(keyword, sigma=1., gray_matter_mask=None):
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, gray_matter_mask=gray_matter_mask)
+    
+
+    sum_map = sum_from_maps(maps)
+    sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
+    sum_data = gaussian_filter(sum_data, sigma=sigma)
+    sum_img = data_to_img(sum_data, affine_r)
+
+    n_voxels, _ = maps.shape
+    e = scipy.sparse.csr_matrix(np.ones(n_voxels))
+    n_peaks = int(e.dot(sum_map)[0, 0])
+
+    return sum_img, n_peaks
 
 def compute_maps(pmids, Ni, Nj, Nk, inv_affine, sigma, keyword):
     '''
@@ -214,8 +229,8 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
 
 if __name__ == '__main__':
     pmid = 22266924
-    # keyword = 'prosopagnosia'
-    keyword = 'schizophrenia'
+    keyword = 'prosopagnosia'
+    # keyword = 'schizophrenia'
     sigma = 2.
 
     # stat_img = build_activity_map_from_pmid(pmid, sigma=sigma)
@@ -229,15 +244,19 @@ if __name__ == '__main__':
 
     # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
 
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=1, sigma=2.)
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=1, sigma=None)
     print(maps)
     print(maps.shape)
     print(Ni_r, Nj_r, Nk_r)
 
-    sum_map = sum_from_maps(maps)
-    sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
-    sum_data = gaussian_filter(sum_data, sigma=sigma)
-    sum_img = data_to_img(sum_data, affine_r)
+    # sum_map = sum_from_maps(maps)
+    # sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
+    # sum_data = gaussian_filter(sum_data, sigma=sigma)
+    # sum_img = data_to_img(sum_data, affine_r)
+
+    sum_img = build_activity_map_from_keyword(keyword, sigma=sigma)
 
     plot_activity_map(sum_img, threshold=0.4)
+
+    # plot_activity_map(map_to_img(sum_from_maps(maps), Ni_r, Nj_r, Nk_r, affine_r), threshold=0.4)
 
