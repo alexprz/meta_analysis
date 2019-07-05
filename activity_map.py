@@ -9,8 +9,11 @@ from time import time
 from matplotlib import pyplot as plt
 matplotlib.use('TkAgg')
 import scipy
+import multiprocessing
+from joblib import Parallel, delayed
+# import ray
 
-from globals import Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
+from globals import mem, Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
 from tools import print_percent, index_3D_to_1D
 
@@ -132,7 +135,31 @@ def average_activity_map_by_keyword(keyword, sigma=1, gray_matter_mask=True):
 
     return avg_gauss_img, avg_img, n_samples
 
+# @ray.remote
+def compute_map(enumerate_pmids, Ni_r, Nj_r, Nk_r, inv_affine_r):
+    # print('############')
+    # print(maps_id)
+    # print('############')
+    # maps = ray.get(maps_id)
+    count=0
+    n_tot = len(enumerate_pmids)
+    maps = scipy.sparse.lil_matrix((n_tot, Ni_r*Nj_r*Nk_r))
 
+    for map_index, pmid in enumerate_pmids:
+
+        print_percent(count, n_tot, prefix='Building maps associated to {} '.format(keyword))
+        for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+            # print(index)
+            x, y, z = row['x'], row['y'], row['z']
+            i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
+            p = index_3D_to_1D(i, j, k, Ni_r, Nj_r, Nk_r)
+            # print(Ni_r*Nj_r*Nk_r)
+            maps[count, p] += 1
+        count += 1
+
+    return maps
+
+# @mem.cache
 def get_all_maps_associated_to_keyword(keyword, gray_matter_mask=True, reduce=1):
     feature_id = encode_feature[keyword]
     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
@@ -150,26 +177,64 @@ def get_all_maps_associated_to_keyword(keyword, gray_matter_mask=True, reduce=1)
 
     # Lil format allows faster incremental construction of sparse matrix
     maps = scipy.sparse.lil_matrix((n_samples, Ni_r*Nj_r*Nk_r)) #np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
-    for map_index, pmid in enumerate(nonzero_pmids):
+    # for map_index, pmid in enumerate(nonzero_pmids):
 
-        print_percent(map_index, n_samples, prefix='Building maps associated to {} '.format(keyword))
-        for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
-            # print(index)
-            x, y, z = row['x'], row['y'], row['z']
-            i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
-            p = index_3D_to_1D(i, j, k, Ni_r, Nj_r, Nk_r)
-            # print(Ni_r*Nj_r*Nk_r)
-            maps[map_index, p] += 1
+    #     print_percent(map_index, n_samples, prefix='Building maps associated to {} '.format(keyword))
+    #     for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+    #         # print(index)
+    #         x, y, z = row['x'], row['y'], row['z']
+    #         i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
+    #         p = index_3D_to_1D(i, j, k, Ni_r, Nj_r, Nk_r)
+    #         # print(Ni_r*Nj_r*Nk_r)
+    #         maps[map_index, p] += 1
 
+    # @ray.remote
+    # def compute_map(enumerate_pmids):
+    #     # print('############')
+    #     # print(maps_id)
+    #     # print('############')
+    #     # maps = ray.get(maps_id)
+    #     count=0
+    #     n_tot = len(enumerate_pmids)
+    #     maps = scipy.sparse.lil_matrix((n_tot, Ni_r*Nj_r*Nk_r))
+
+    #     for map_index, pmid in enumerate_pmids:
+
+    #         print_percent(count, n_tot, prefix='Building maps associated to {} '.format(keyword))
+    #         for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+    #             # print(index)
+    #             x, y, z = row['x'], row['y'], row['z']
+    #             i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
+    #             p = index_3D_to_1D(i, j, k, Ni_r, Nj_r, Nk_r)
+    #             # print(Ni_r*Nj_r*Nk_r)
+    #             maps[count, p] += 1
+    #         count += 1
+
+    #     return maps
 
         # With gaussian kernel, sparse calculation may not be efficient (not enough zeros)
         # if gaussian_filter:
         #     stat_img_data = scipy.ndimage.gaussian_filter(stat_img_data, sigma=sigma)
 
         # maps.append(sparse_map)
+
+
+    n_jobs = multiprocessing.cpu_count()-1
+    splitted_array = np.array_split(np.array(list(enumerate(nonzero_pmids))), n_jobs)
+    # ray.init()
+    # maps_id = ray.put(maps)
+    # print('____________')
+    # print(maps_id)
+    
+    time0 = time()
+    maps = scipy.sparse.vstack(Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_map)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine) for sub_array in splitted_array))
+    
+    # maps = scipy.sparse.vstack(ray.get([compute_map.remote(sub_array, Ni_r, Nj_r, Nk_r, inv_affine) for sub_array in splitted_array]))
+    
+    print('TIME : {}'.format(time()-time0))
     # Converting to CSR format (more efficient for operations)
     maps = scipy.sparse.csr_matrix(maps)
-    return maps, affine_r
+    return maps, Ni_r, Nj_r, Nk_r, affine_r
 
 
 
@@ -190,4 +255,4 @@ if __name__ == '__main__':
 
     # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
 
-    get_all_maps_associated_to_keyword(keyword)
+    print(get_all_maps_associated_to_keyword(keyword)[0])
