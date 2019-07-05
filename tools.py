@@ -1,8 +1,7 @@
-from globals import mem
 import scipy
 import numpy as np
 
-from globals import Ni, Nj, Nk
+from globals import mem, Ni, Nj, Nk
 
 def print_percent(index, total, prefix='', rate=10000):
     if (total//rate) == 0 or index % (total//rate) == 0:
@@ -68,6 +67,32 @@ def index_1D_to_3D_checked(p, Ni, Nj, Nk):
 
     return index_1D_to_3D(p, Ni, Nj, Nk)
 
+def map_to_data(map, Ni, Nj, Nk):
+    '''
+        Convert a sparse CSR matrix of shape (n_voxels, 1) into a dense 3D numpy array of shape (Ni, Nj, Nk).
+
+        Indexing of map is supposed to have been made Fortran like.
+    '''
+    n_voxels, _ = map.shape
+
+    if n_voxels != Ni*Nj*Nk:
+        raise ValueError('Map\'s length ({}) does not match given box ({}, {}, {}) of size {}'.format(n_voxels, Ni, Nj, Nk, Ni*Nj*Nk))
+
+    # data = np.zeros((Ni, Nj, Nk))
+
+    # non_zeros, _ = map.nonzero()
+
+    # for p in non_zeros:
+    #     # print(p)
+    #     i, j, k = index_1D_to_3D(p, Ni, Nj, Nk)
+    #     data[i, j, k] = map[p, 0]
+
+    # data = map.toarray()
+
+    # data = data.reshape((Ni, Nj, Nk))
+
+
+    return map.toarray().reshape((Ni, Nj, Nk), order='F')
 
 if __name__ == '__main__':
     i, j, k = 3, 4, 5
