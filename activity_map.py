@@ -15,7 +15,7 @@ from joblib import Parallel, delayed
 
 from globals import mem, Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
-from tools import print_percent, index_3D_to_1D
+from tools import print_percent, index_3D_to_1D, sum_from_maps, map_to_data, data_to_img
 
 matplotlib.use('TkAgg')
 print(matplotlib.get_backend())
@@ -121,21 +121,21 @@ def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
 
     return freq_gauss_img, hist_gauss_img, hist_img, n_samples
 
-def average_activity_map_by_keyword(keyword, sigma=1, gray_matter_mask=True):
-    freq_gauss_img, hist_gauss_img, hist_img, n_samples = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=gray_matter_mask)
+# def average_activity_map_by_keyword(keyword, sigma=1, gray_matter_mask=True):
+#     freq_gauss_img, hist_gauss_img, hist_img, n_samples = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=gray_matter_mask)
 
-    hist_gauss_data = np.array(hist_gauss_img.get_data())
-    hist_data = np.array(hist_img.get_data())
+#     hist_gauss_data = np.array(hist_gauss_img.get_data())
+#     hist_data = np.array(hist_img.get_data())
 
 
-    avg_gauss_img = nib.Nifti1Image(hist_gauss_data/n_samples, hist_gauss_img.affine)
-    avg_img = nib.Nifti1Image(hist_data/n_samples, hist_img.affine)
+#     avg_gauss_img = nib.Nifti1Image(hist_gauss_data/n_samples, hist_gauss_img.affine)
+#     avg_img = nib.Nifti1Image(hist_data/n_samples, hist_img.affine)
 
-    print(avg_img.get_data())
+#     print(avg_img.get_data())
 
-    return avg_gauss_img, avg_img, n_samples
+#     return avg_gauss_img, avg_img, n_samples
 
-def compute_maps(pmids, Ni, Nj, Nk, inv_affine, keyword):
+def compute_maps(pmids, Ni, Nj, Nk, inv_affine, sigma, keyword):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
         Used for multiprocessing in get_all_maps_associated_to_keyword function.
@@ -159,10 +159,15 @@ def compute_maps(pmids, Ni, Nj, Nk, inv_affine, keyword):
             p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
             maps[count, p] += 1
 
+        if sigma != None:
+            data = maps[count, :].toarray().reshape((Ni, Nj, Nk), order='F')
+            data = gaussian_filter(data, sigma=sigma)
+            maps[count, :] = data.reshape(-1, order='F')
+
     return maps
 
 @mem.cache
-def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None):
+def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None, sigma=None):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
@@ -195,9 +200,14 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None)
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()-1
     splitted_array = np.array_split(np.array(nonzero_pmids), n_jobs)
-    maps = scipy.sparse.vstack(Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine_r, keyword) for sub_array in splitted_array))
-
+    
+    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine_r, sigma, keyword) for sub_array in splitted_array)
+    
+    print('Stacking...')
+    maps = scipy.sparse.vstack(results)
+    
     # Converting to CSR format (more efficient for operations)
+    print('Converting from LIL to CSR format...')
     maps = scipy.sparse.csr_matrix(maps).transpose()
     return maps, Ni_r, Nj_r, Nk_r, affine_r
 
@@ -219,7 +229,15 @@ if __name__ == '__main__':
 
     # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
 
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=1)
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=1, sigma=2.)
     print(maps)
     print(maps.shape)
     print(Ni_r, Nj_r, Nk_r)
+
+    sum_map = sum_from_maps(maps)
+    sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
+    sum_data = gaussian_filter(sum_data, sigma=sigma)
+    sum_img = data_to_img(sum_data, affine_r)
+
+    plot_activity_map(sum_img, threshold=0.4)
+
