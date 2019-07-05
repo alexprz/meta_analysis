@@ -78,20 +78,6 @@ def map_to_data(map, Ni, Nj, Nk):
     if n_voxels != Ni*Nj*Nk:
         raise ValueError('Map\'s length ({}) does not match given box ({}, {}, {}) of size {}'.format(n_voxels, Ni, Nj, Nk, Ni*Nj*Nk))
 
-    # data = np.zeros((Ni, Nj, Nk))
-
-    # non_zeros, _ = map.nonzero()
-
-    # for p in non_zeros:
-    #     # print(p)
-    #     i, j, k = index_1D_to_3D(p, Ni, Nj, Nk)
-    #     data[i, j, k] = map[p, 0]
-
-    # data = map.toarray()
-
-    # data = data.reshape((Ni, Nj, Nk))
-
-
     return map.toarray().reshape((Ni, Nj, Nk), order='F')
 
 if __name__ == '__main__':
