@@ -195,7 +195,7 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None)
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()-1
     splitted_array = np.array_split(np.array(nonzero_pmids), n_jobs)
-    maps = scipy.sparse.vstack(Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine, keyword) for sub_array in splitted_array))
+    maps = scipy.sparse.vstack(Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine_r, keyword) for sub_array in splitted_array))
 
     # Converting to CSR format (more efficient for operations)
     maps = scipy.sparse.csr_matrix(maps).transpose()
