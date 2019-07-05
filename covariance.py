@@ -9,7 +9,7 @@ from joblib import Parallel, delayed
 
 from globals import mem, coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine
 from builds import encode_pmid, encode_feature, decode_pmid, decode_feature
-from tools import print_percent, empirical_cov_matrix, map_to_data, data_to_img, map_to_img
+from tools import print_percent, map_to_data, data_to_img, map_to_img
 from threshold import estimate_threshold_covariance
 from activity_map import get_all_maps_associated_to_keyword, plot_activity_map
 
@@ -54,32 +54,54 @@ def variance_from_maps(maps):
 
     return avg_squared_map - squared_avg_map
 
+def covariance_from_maps(maps):
+    '''
+        Builds the empirical covariance matrix of the given maps on the second axis.
 
-def compute_map(pmid_enumerate, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussian_filter):
-    n_tot = len(pmid_enumerate)
-    observations_ = np.zeros((n_tot, n_voxels))
-    counts = np.zeros(n_tot).astype(int)
-    p = 0
-    for obs_index, pmid in pmid_enumerate:
-        stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
+        Returns a sparse CSR matrix of shape (n_voxels, n_voxels) representing the covariance matrix.
+    '''
 
-        # For each coordinates found in pmid (in mm), compute its corresponding voxels coordinates
-        # and note it as activated
-        print_percent(p, n_tot, prefix='Covariance matrix ')
-        for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
-            x, y, z = row['x'], row['y'], row['z']
-            i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
-            stat_img_data[i, j, k] += 1
-            counts[p] += 1
+    _, n_pmids = maps.shape 
 
-        # With gaussian kernel, sparse calculation may not be efficient (not enough zeros)
-        if gaussian_filter:
-            stat_img_data = scipy.ndimage.gaussian_filter(stat_img_data, sigma=sigma)
+    # s_X = scipy.sparse.csr_matrix(observations)
+    # s_Ones = scipy.sparse.csr_matrix(np.ones(n_pmids))
 
-        observations_[p, :] = stat_img_data.reshape(-1)
-        p += 1
+    e = scipy.sparse.csr_matrix(np.ones(n_pmids)/n_pmids).transpose()
 
-    return observations_, counts
+    # M1 = s_X.transpose().dot(s_X)
+    # M2 = (s_Ones.dot(s_X)).transpose()
+    # M3 = s_Ones.dot(s_X)
+
+    M1 = maps.dot(maps.transpose())/n_pmids
+    M2 = maps.dot(e)
+
+    return M1 - M2.dot(M2.transpose())
+
+# def compute_map(pmid_enumerate, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussian_filter):
+#     n_tot = len(pmid_enumerate)
+#     observations_ = np.zeros((n_tot, n_voxels))
+#     counts = np.zeros(n_tot).astype(int)
+#     p = 0
+#     for obs_index, pmid in pmid_enumerate:
+#         stat_img_data = np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
+
+#         # For each coordinates found in pmid (in mm), compute its corresponding voxels coordinates
+#         # and note it as activated
+#         print_percent(p, n_tot, prefix='Covariance matrix ')
+#         for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+#             x, y, z = row['x'], row['y'], row['z']
+#             i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
+#             stat_img_data[i, j, k] += 1
+#             counts[p] += 1
+
+#         # With gaussian kernel, sparse calculation may not be efficient (not enough zeros)
+#         if gaussian_filter:
+#             stat_img_data = scipy.ndimage.gaussian_filter(stat_img_data, sigma=sigma)
+
+#         observations_[p, :] = stat_img_data.reshape(-1)
+#         p += 1
+
+#     return observations_, counts
 
 @mem.cache
 def build_covariance_matrix_from_keyword(keyword, gaussian_filter=False, sigma=2., reduce=2):
@@ -140,7 +162,22 @@ def plot_matrix_heatmap(M):
     sns.heatmap(M)
     plt.show()
 
-def plot_cov_matrix_brain(M, coords, affine, threshold):
+def plot_cov_matrix_brain(M, Ni, Nj, Nk, affine, threshold=None):
+    
+    n_voxels, _ = M.shape
+    # coords = np.arange(n_voxels).reshape((Ni, Nj, Nk), order='F')
+
+    coords = np.zeros((Ni_r, Nj_r, Nk_r, 3)).astype(int)
+
+    for k in range(Ni_r):
+         coords[k, :, :, 0] = k
+    for k in range(Nj_r):
+         coords[:, k, :, 1] = k
+    for k in range(Nk_r):
+         coords[:, :, k, 2] = k
+
+    coords = coords.reshape((-1, 3), order='F')
+
     coords_world = np.zeros(coords.shape)
 
     # print(affine)
@@ -150,6 +187,7 @@ def plot_cov_matrix_brain(M, coords, affine, threshold):
         # print(coords_world[k, :])
 
     # threshold = np.max(M)*0.1
+    threshold=0.5
     # print(threshold)
     plotting.plot_connectome(M, coords_world, node_size=5, node_color='black', edge_threshold=threshold)
     plt.show()
@@ -177,20 +215,22 @@ if __name__ == '__main__':
     # # threshold = '25%'
     # plot_cov_matrix_brain(cov_array, coords, affine_r, threshold)
 
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=1)
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=5)
 
     avg_map = average_from_maps(maps)
     var_map = variance_from_maps(maps)
+
+    avg_data = map_to_data(avg_map, Ni_r, Nj_r, Nk_r)
+    avg_img = data_to_img(avg_data, affine_r)
+
     print(avg_map.shape)
 
-    avg_data = map_to_data(avg_map, Ni, Nj, Nk)
-
-    print(avg_data)
-
-    avg_img = data_to_img(avg_data, affine)
-
     # plot_activity_map(avg_img)
-    plot_activity_map(map_to_img(avg_map, Ni, Nj, Nk, affine))
-    plot_activity_map(map_to_img(var_map, Ni, Nj, Nk, affine))
+    plot_activity_map(map_to_img(avg_map, Ni_r, Nj_r, Nk_r, affine_r), threshold=0.04)
+    plot_activity_map(map_to_img(var_map, Ni_r, Nj_r, Nk_r, affine_r), threshold=0.06)
 
+    # cov_matrix = covariance_from_maps(maps)
+    # print(cov_matrix)
+
+    # plot_cov_matrix_brain(cov_matrix, Ni_r, Nj_r, Nk_r, affine_r)
 
