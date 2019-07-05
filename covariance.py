@@ -25,20 +25,35 @@ from activity_map import get_all_maps_associated_to_keyword, plot_activity_map
 
 #     return M1/n_observations - M2.dot(M3)/(n_observations**2)
 
-def average_activity_map(keyword, reduce=1):
+def average_from_maps(maps):
     '''
-        Builds the average map of the studies related to the keyword.
+        Builds the average map of the given maps on the second axis.
 
-        Returns a sparse CSR matrix of shape (n_pmids, 1) representing the flattened average map
-        where n_pmids is the number of pmid related to the keyword.
+        maps : sparse CSR matrix of shape (n_voxels, n_pmids) where
+            n_voxels is the number of voxels in the box
+            n_pmids is the number of pmids
+
+        Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened average map.
     '''
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=reduce)
-    print(maps.shape)
     _, n_pmids = maps.shape
     e = scipy.sparse.csr_matrix(np.ones(n_pmids)/n_pmids).transpose()
-    print(e.shape)
 
-    return maps.dot(e), Ni_r, Nj_r, Nk_r, affine_r
+    return maps.dot(e)
+
+def variance_from_maps(maps):
+    '''
+        Builds the variance map of the given maps on the second axis.
+
+        Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened variance map.
+    '''
+    avg_map = average_from_maps(maps)
+    maps_squared = maps.multiply(maps) # Squared element wise
+
+    avg_squared_map = average_from_maps(maps_squared)
+    squared_avg_map = avg_map.multiply(avg_map)
+
+    return avg_squared_map - squared_avg_map
+
 
 def compute_map(pmid_enumerate, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussian_filter):
     n_tot = len(pmid_enumerate)
@@ -140,11 +155,6 @@ def plot_cov_matrix_brain(M, coords, affine, threshold):
     plt.show()
 
 
-def variance_activity_map_by_keyword(keyword, sigma=2.):
-    pass
-
-
-
 if __name__ == '__main__':
     keyword = 'memory'
     # keyword = 'prosopagnosia'
@@ -167,7 +177,10 @@ if __name__ == '__main__':
     # # threshold = '25%'
     # plot_cov_matrix_brain(cov_array, coords, affine_r, threshold)
 
-    avg_map, Ni, Nj, Nk, affine = average_activity_map(keyword)
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=1)
+
+    avg_map = average_from_maps(maps)
+    var_map = variance_from_maps(maps)
     print(avg_map.shape)
 
     avg_data = map_to_data(avg_map, Ni, Nj, Nk)
@@ -178,5 +191,6 @@ if __name__ == '__main__':
 
     # plot_activity_map(avg_img)
     plot_activity_map(map_to_img(avg_map, Ni, Nj, Nk, affine))
+    plot_activity_map(map_to_img(var_map, Ni, Nj, Nk, affine))
 
 
