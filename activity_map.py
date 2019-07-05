@@ -8,8 +8,11 @@ from scipy.ndimage import gaussian_filter
 from time import time
 from matplotlib import pyplot as plt
 matplotlib.use('TkAgg')
+import scipy
+
 from globals import Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
+from tools import print_percent, index_3D_to_1D
 
 matplotlib.use('TkAgg')
 print(matplotlib.get_backend())
@@ -130,6 +133,45 @@ def average_activity_map_by_keyword(keyword, sigma=1, gray_matter_mask=True):
     return avg_gauss_img, avg_img, n_samples
 
 
+def get_all_maps_associated_to_keyword(keyword, gray_matter_mask=True, reduce=1):
+    feature_id = encode_feature[keyword]
+    nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
+    n_samples = len(nonzero_pmids)
+    Ni_r, Nj_r, Nk_r = np.ceil(np.array((Ni, Nj, Nk))/reduce).astype(int)
+
+    # Change affine to new box size
+    affine_r = np.copy(affine)
+    for i in range(3):
+        affine_r[i, i] = affine[i, i]*reduce
+
+    inv_affine_r = np.linalg.inv(affine_r)
+
+    maps = []
+
+    # Lil format allows faster incremental construction of sparse matrix
+    maps = scipy.sparse.lil_matrix((n_samples, Ni_r*Nj_r*Nk_r)) #np.zeros((Ni_r,Nj_r,Nk_r)) # Building blank stat_img with MNI152's shape
+    for map_index, pmid in enumerate(nonzero_pmids):
+
+        print_percent(map_index, n_samples, prefix='Building maps associated to {} '.format(keyword))
+        for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+            # print(index)
+            x, y, z = row['x'], row['y'], row['z']
+            i, j, k = np.minimum(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [Ni_r-1, Nj_r-1, Nk_r-1])
+            p = index_3D_to_1D(i, j, k, Ni_r, Nj_r, Nk_r)
+            # print(Ni_r*Nj_r*Nk_r)
+            maps[map_index, p] += 1
+
+
+        # With gaussian kernel, sparse calculation may not be efficient (not enough zeros)
+        # if gaussian_filter:
+        #     stat_img_data = scipy.ndimage.gaussian_filter(stat_img_data, sigma=sigma)
+
+        # maps.append(sparse_map)
+    # Converting to CSR format (more efficient for operations)
+    maps = scipy.sparse.csr_matrix(maps)
+    return maps, affine_r
+
+
 
 if __name__ == '__main__':
     pmid = 22266924
@@ -137,13 +179,15 @@ if __name__ == '__main__':
     keyword = 'schizophrenia'
     sigma = 2.
 
-    stat_img = build_activity_map_from_pmid(pmid, sigma=sigma)
+    # stat_img = build_activity_map_from_pmid(pmid, sigma=sigma)
     # plot_activity_map(stat_img, glass_brain=True, threshold=0.)
 
     # freq_gauss_img, hist_gauss_img, hist_img, n_samples = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=True)
     # print('Nb peaks : {}'.format(nb_peaks))
     # plot_activity_map(hist_gauss_img, glass_brain=False, threshold=0.04)
 
-    avg_gauss_img, avg_img, n_samples = average_activity_map_by_keyword(keyword, sigma=sigma, gray_matter_mask=True)
+    # avg_gauss_img, avg_img, n_samples = average_activity_map_by_keyword(keyword, sigma=sigma, gray_matter_mask=True)
 
-    plot_activity_map(avg_img, glass_brain=False, threshold=0.)
+    # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
+
+    get_all_maps_associated_to_keyword(keyword)
