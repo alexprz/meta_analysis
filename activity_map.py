@@ -226,7 +226,7 @@ class Maps:
             maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=normalize, reduce=reduce, sigma=sigma)
             self.n_voxels, self.n_pmids = maps.shape
         else:
-            maps, Ni_r, Nj_r, Nk_r, affine_r = None, None, None, None, None
+            maps, Ni_r, Nj_r, Nk_r, affine_r = None, Ni, Nj, Nk, affine
             self.n_voxels, self.n_pmids = 0, 0
 
         self._maps = maps
@@ -245,11 +245,12 @@ class Maps:
     def __str__(self):
         string = '\nMaps object containing {} maps.\n'
         string += '____________Header_____________\n'
+        string += 'N Nonzero : {}\n'
         string += 'N voxels : {}\n'
         string += 'N pmids : {}\n'
         string += 'Box size : ({}, {}, {})\n'
         string += 'Affine :\n{}\n'
-        return string.format(self.n_pmids, self.n_voxels, self.n_pmids, self.Ni, self.Nj, self.Nk, self.affine)
+        return string.format(self.n_pmids, self.maps.count_nonzero(), self.n_voxels, self.n_pmids, self.Ni, self.Nj, self.Nk, self.affine)
 
     @property
     def maps(self):
@@ -262,6 +263,15 @@ class Maps:
         else:
             self.n_voxels, self.n_pmids = maps.shape
         self._maps = maps
+
+    def randomize(self, n_peaks, n_maps, inplace=False):
+        maps = scipy.sparse.csr_matrix(np.random.binomial(n=n_peaks, p=1./(self.Ni*self.Nj*self.Nk*n_maps), size=(self.Ni*self.Nj*self.Nk, n_maps)).astype(float))
+
+        new_maps = self if inplace else copy.copy(self)
+        new_maps.maps = maps
+
+        return new_maps
+
 
     @staticmethod
     def map_to_data(map, Ni, Nj, Nk):
@@ -438,6 +448,9 @@ if __name__ == '__main__':
     # keyword = 'memory'
     sigma = 2.
 
-    img = metaanalysis_img_from_keyword(keyword, sigma=sigma)
-    plot_activity_map(img, threshold=0.00065)
+    # img = metaanalysis_img_from_keyword(keyword, sigma=sigma)
+    # plot_activity_map(img, threshold=0.00065)
+
+    rand_maps = Maps().randomize(100000, 10)
+    print(rand_maps)
 
