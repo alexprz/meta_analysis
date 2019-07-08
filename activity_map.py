@@ -136,22 +136,6 @@ def plot_activity_map(stat_img, threshold=0., glass_brain=False):
 
 #     return avg_gauss_img, avg_img, n_samples
 
-def build_activity_map_from_keyword(keyword, normalize=False, sigma=1., gray_matter_mask=None):
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=normalize, gray_matter_mask=gray_matter_mask)
-    
-
-    sum_map = sum_from_maps(maps)
-    print(sum_map)
-    sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
-    sum_data = gaussian_filter(sum_data, sigma=sigma)
-    sum_img = data_to_img(sum_data, affine_r)
-
-    n_voxels, _ = maps.shape
-    e = scipy.sparse.csr_matrix(np.ones(n_voxels))
-    n_peaks = int(e.dot(sum_map)[0, 0])
-
-    return sum_img, n_peaks
-
 def compute_maps(pmids, Ni, Nj, Nk, inv_affine, normalize, sigma, keyword):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
@@ -179,15 +163,9 @@ def compute_maps(pmids, Ni, Nj, Nk, inv_affine, normalize, sigma, keyword):
             p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
 
             if normalize:
-                # print(normalize)
                 maps[count, p] += 1./n_peaks
             else:
                 maps[count, p] += 1
-
-
-        # if normalize:
-        #     print(n_peaks)
-        #     maps[count, :]/=n_peaks
 
         if sigma != None:
             data = maps[count, :].toarray().reshape((Ni, Nj, Nk), order='F')
@@ -228,7 +206,7 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
     inv_affine_r = np.linalg.inv(affine_r)
 
     # Multiprocessing maps computation
-    n_jobs = multiprocessing.cpu_count()-1
+    n_jobs = multiprocessing.cpu_count()//2
     splitted_array = np.array_split(np.array(nonzero_pmids), n_jobs)
     
     results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine_r, normalize, sigma, keyword) for sub_array in splitted_array)
@@ -243,9 +221,9 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
 
 
 class Maps:
-    def __init__(self, keyword=None):
+    def __init__(self, keyword=None, reduce=1, normalize=False, sigma=None):
         if keyword != None:
-            maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
+            maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=normalize, reduce=reduce, sigma=sigma)
             self.n_voxels, self.n_pmids = maps.shape
         else:
             maps, Ni_r, Nj_r, Nk_r, affine_r = None, None, None, None, None
@@ -447,71 +425,19 @@ class Maps:
 
         return M1 - M2.dot(M2.transpose())
 
+def metaanalysis_img_from_keyword(keyword, sigma=None, reduce=1, normalize=False):
+    maps = Maps(keyword, sigma=sigma, reduce=reduce, normalize=normalize)
+    maps = maps.avg()
+    return maps.to_img()
+
+
 if __name__ == '__main__':
     pmid = 22266924
     keyword = 'prosopagnosia'
     # keyword = 'schizophrenia'
+    # keyword = 'memory'
     sigma = 2.
 
-    # stat_img = build_activity_map_from_pmid(pmid, sigma=sigma)
-    # plot_activity_map(stat_img, glass_brain=True, threshold=0.)
-
-    # freq_gauss_img, hist_gauss_img, hist_img, n_samples = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=True)
-    # print('Nb peaks : {}'.format(nb_peaks))
-    # plot_activity_map(hist_gauss_img, glass_brain=False, threshold=0.04)
-
-    # avg_gauss_img, avg_img, n_samples = average_activity_map_by_keyword(keyword, sigma=sigma, gray_matter_mask=True)
-
-    # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
-
-    # maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
-    # print(maps)
-    # # print(maps.shape)
-    # # print(Ni_r, Nj_r, Nk_r)
-
-    # maps = normalize_maps(maps)
-    # sum_map = sum_from_maps(maps)
-    # sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
-    # sum_data = gaussian_filter(sum_data, sigma=sigma)
-    # sum_img = data_to_img(sum_data, affine_r)
-
-    # # sum_img, n_peaks = build_activity_map_from_keyword(keyword, normalize=False, sigma=sigma)
-
-    # # plot_activity_map(sum_img, threshold=0.04)
-    # plot_activity_map(sum_img, threshold=0.003)
-
-    # plot_activity_map(map_to_img(sum_from_maps(maps), Ni_r, Nj_r, Nk_r, affine_r), threshold=0.4)
-
-    maps = Maps(keyword)
-    print(maps.Ni*maps.Nj*maps.Nk)
-    maps.normalize(inplace=True)
-    # maps = maps.normalize()
-    maps.to_data(3)
-    sum_map = maps.sum()
-    print(sum_map)
-    var_map = maps.var()
-    # sum_map = maps.avg()
-    avg_map = maps.avg()
-    # img = Maps.map_to_img(avg_map, maps.Ni, maps.Nj, maps.Nk, maps.affine)
-    # sum_data = Maps.map_to_data(sum_map, maps.Ni, maps.Nj, maps.Nk)
-    # sum_data = sum_map.to_data()
-    # sum_data = gaussian_filter(sum_data, sigma=sigma)
-    # sum_img = Maps.data_to_img(sum_data, maps.affine)
-    sum_map_smoothed = sum_map.smooth(sigma=sigma)
-    sum_img = sum_map.to_img()
-    # sum_img = sum_map.to_img()
-    # avg_img = avg_map.to_img()
-    # var_img = var_map.to_img()
-
-    # plot_activity_map(sum_img, threshold=0.000015)
-    # plot_activity_map(avg_img, threshold=0.00)
-    # plot_activity_map(var_img, threshold=0.00)
-    plot_activity_map(sum_img, threshold=0.003)
-    plot_activity_map(sum_map_smoothed.to_img(), threshold=0.003)
-    # plot_activity_map(img, threshold=0.00)
-
-    # empty_maps = Maps()
-    # empty_maps.copy_header(maps)
-
-    # print(empty_maps)
+    img = metaanalysis_img_from_keyword(keyword, sigma=sigma)
+    plot_activity_map(img, threshold=0.00065)
 
