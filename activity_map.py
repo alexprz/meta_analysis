@@ -16,7 +16,7 @@ import copy
 
 from globals import mem, Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
-from tools import print_percent, index_3D_to_1D, map_to_data, data_to_img, map_to_img
+from tools import print_percent, index_3D_to_1D
 
 matplotlib.use('TkAgg')
 print(matplotlib.get_backend())
@@ -196,7 +196,7 @@ def compute_maps(pmids, Ni, Nj, Nk, inv_affine, normalize, sigma, keyword):
 
     return maps
 
-# @mem.cache
+@mem.cache
 def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None, normalize=False, sigma=None):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
@@ -252,6 +252,54 @@ class Maps:
         self.Nk = Nk_r
         self.affine = affine_r
 
+    @staticmethod
+    def map_to_data(map, Ni, Nj, Nk):
+        '''
+            Convert a sparse matrix of shape (n_voxels, 1) into a dense 3D numpy array of shape (Ni, Nj, Nk).
+
+            Indexing of map is supposed to have been made Fortran like (first index moving fastest).
+        '''
+        n_voxels, _ = map.shape
+
+        if n_voxels != Ni*Nj*Nk:
+            raise ValueError('Map\'s length ({}) does not match given box ({}, {}, {}) of size {}.'.format(n_voxels, Ni, Nj, Nk, Ni*Nj*Nk))
+
+        return map.toarray().reshape((Ni, Nj, Nk), order='F')
+
+    def to_data(self, map_id=None):
+        if map_id!=None:
+            return self.map_to_data(self.maps[:, map_id], self.Ni, self.Nj, self.Nk)
+
+        if self.n_pmids > 1:
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to data.'.format(self.n_pmids))
+
+        return self.map_to_data(self.maps[0, map_id], self.Ni, self.Nj, self.Nk)
+
+    @staticmethod
+    def data_to_img(data, affine):
+        '''
+            Convert a dense 3D data array into a nibabel Nifti1Image.
+        '''
+        return nib.Nifti1Image(data, affine)
+
+    @staticmethod
+    def map_to_img(map, Ni, Nj, Nk, affine):
+        '''
+            Convert a sparse matrix of shape (n_voxels, 1) into a nibabel Nifti1Image.
+
+            Ni, Nj, Nk are the size of the box used to index the flattened map matrix.
+        '''
+        return Maps.data_to_img(Maps.map_to_data(map, Ni, Nj, Nk), affine)
+
+    def to_img(self, map_id=None):
+        if map_id!=None:
+            return self.map_to_img(self.maps[:, map_id], self.Ni, self.Nj, self.Nk, self.affine)
+
+        if self.n_pmids > 1:
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self.n_pmids))
+
+        return self.map_to_img(self.maps[0, map_id], self.Ni, self.Nj, self.Nk, self.affine)
+
     def n_peaks(self):
         '''
             Returns a numpy array containing the number of peaks in each maps
@@ -287,6 +335,13 @@ class Maps:
         new_maps.maps = self.maps.dot(diag)
 
         return new_maps
+
+    # def smooth(self, sigma, inplace=False):
+    #     '''
+
+    #     '''
+
+
 
     @staticmethod
     def average(maps):
@@ -378,20 +433,21 @@ if __name__ == '__main__':
     # plot_activity_map(map_to_img(sum_from_maps(maps), Ni_r, Nj_r, Nk_r, affine_r), threshold=0.4)
 
     maps = Maps(keyword)
-    print(maps.Ni)
     maps.normalize(inplace=True)
     # maps = maps.normalize()
-    print(maps.Ni)
-    # sum_map = maps.sum()
-    sum_map = maps.var()
+    maps.to_data(3)
+    sum_map = maps.sum()
+    # sum_map = maps.var()
     # sum_map = maps.avg()
-    print(maps.Ni)
-    sum_data = map_to_data(sum_map, maps.Ni, maps.Nj, maps.Nk)
+    avg_map = maps.avg()
+    img = Maps.map_to_img(avg_map, maps.Ni, maps.Nj, maps.Nk, maps.affine)
+    sum_data = Maps.map_to_data(sum_map, maps.Ni, maps.Nj, maps.Nk)
     sum_data = gaussian_filter(sum_data, sigma=sigma)
-    sum_img = data_to_img(sum_data, maps.affine)
+    sum_img = Maps.data_to_img(sum_data, maps.affine)
 
-    plot_activity_map(sum_img, threshold=0.000015)
+    # plot_activity_map(sum_img, threshold=0.000015)
     # plot_activity_map(sum_img, threshold=0.003)
+    plot_activity_map(img, threshold=0.00)
 
 
 
