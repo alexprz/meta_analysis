@@ -288,6 +288,59 @@ class Maps:
 
         return new_maps
 
+    @staticmethod
+    def average(maps):
+        '''
+            Builds the average map of the given maps on the second axis.
+
+            maps : sparse CSR matrix of shape (n_voxels, n_pmids) where
+                n_voxels is the number of voxels in the box
+                n_pmids is the number of pmids
+
+            Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened average map.
+        '''
+        _, n_pmids = maps.shape
+        e = scipy.sparse.csr_matrix(np.ones(n_pmids)/n_pmids).transpose()
+
+        return maps.dot(e)
+
+    def avg(self):
+        return self.average(self.maps)
+
+
+    @staticmethod
+    def variance(maps):
+        '''
+            Builds the variance map of the given maps on the second axis.
+
+            Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened variance map.
+        '''
+        avg_map = Maps.average(maps)
+        maps_squared = maps.multiply(maps) # Squared element wise
+
+        avg_squared_map = Maps.average(maps_squared)
+        squared_avg_map = avg_map.multiply(avg_map)
+
+        return avg_squared_map - squared_avg_map
+
+    def var(self):
+        return self.variance(self.maps)
+
+    def cov(self):
+        '''
+            Builds the empirical covariance matrix of the given maps on the second axis.
+
+            Returns a sparse CSR matrix of shape (n_voxels, n_voxels) representing the covariance matrix.
+        '''
+
+        # _, n_pmids = maps.shape 
+
+        e = scipy.sparse.csr_matrix(np.ones(self.n_pmids)/self.n_pmids).transpose()
+
+        M1 = self.maps.dot(self.maps.transpose())/self.n_pmids
+        M2 = self.maps.dot(e)
+
+        return M1 - M2.dot(M2.transpose())
 
 if __name__ == '__main__':
     pmid = 22266924
@@ -329,13 +382,16 @@ if __name__ == '__main__':
     maps.normalize(inplace=True)
     # maps = maps.normalize()
     print(maps.Ni)
-    sum_map = maps.sum()
+    # sum_map = maps.sum()
+    sum_map = maps.var()
+    # sum_map = maps.avg()
     print(maps.Ni)
     sum_data = map_to_data(sum_map, maps.Ni, maps.Nj, maps.Nk)
     sum_data = gaussian_filter(sum_data, sigma=sigma)
     sum_img = data_to_img(sum_data, maps.affine)
 
-    plot_activity_map(sum_img, threshold=0.003)
+    plot_activity_map(sum_img, threshold=0.000015)
+    # plot_activity_map(sum_img, threshold=0.003)
 
 
 
