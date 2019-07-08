@@ -246,19 +246,19 @@ class Maps:
     def __init__(self, keyword=None):
         if keyword != None:
             maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
-            self.n_voxels, self.n_pmids = maps.shape
+            self._n_voxels, self._n_pmids = maps.shape
         else:
             maps, Ni_r, Nj_r, Nk_r, affine_r = None, None, None, None, None
-            self.n_voxels, self.n_pmids = 0, 0
+            self._n_voxels, self._n_pmids = 0, 0
 
-        self.maps = maps
+        self._maps = maps
         self.Ni = Ni_r
         self.Nj = Nj_r
         self.Nk = Nk_r
         self.affine = affine_r
 
     def copy_header(self, other):
-        self.n_voxels, self.n_pmids = other.n_voxels, other.n_pmids
+        self._n_voxels, self._n_pmids = other._n_voxels, other._n_pmids
         self.Ni = other.Ni
         self.Nj = other.Nj
         self.Nk = other.Nk
@@ -271,12 +271,24 @@ class Maps:
         string += 'N pmids : {}\n'
         string += 'Box size : ({}, {}, {})\n'
         string += 'Affine :\n{}\n'
-        return string.format(self.n_pmids, self.n_voxels, self.n_pmids, self.Ni, self.Nj, self.Nk, self.affine)
+        return string.format(self._n_pmids, self._n_voxels, self._n_pmids, self.Ni, self.Nj, self.Nk, self.affine)
+
+    @property
+    def maps(self):
+        return self._maps
+
+    @maps.setter
+    def maps(self, maps):
+        if maps == None:
+            self._n_voxels, self._n_pmids = 0, 0
+        else:
+            self._n_voxels, self._n_pmids = maps.shape
+        self._maps = maps
 
     @staticmethod
     def map_to_data(map, Ni, Nj, Nk):
         '''
-            Convert a sparse matrix of shape (n_voxels, 1) into a dense 3D numpy array of shape (Ni, Nj, Nk).
+            Convert a sparse matrix of shape (_n_voxels, 1) into a dense 3D numpy array of shape (Ni, Nj, Nk).
 
             Indexing of map is supposed to have been made Fortran like (first index moving fastest).
         '''
@@ -289,12 +301,12 @@ class Maps:
 
     def to_data(self, map_id=None):
         if map_id!=None:
-            return self.map_to_data(self.maps[:, map_id], self.Ni, self.Nj, self.Nk)
+            return self.map_to_data(self._maps[:, map_id], self.Ni, self.Nj, self.Nk)
 
-        if self.n_pmids > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to data.'.format(self.n_pmids))
+        if self._n_pmids > 1:
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to data.'.format(self._n_pmids))
 
-        return self.map_to_data(self.maps[0, map_id], self.Ni, self.Nj, self.Nk)
+        return self.map_to_data(self._maps[:, 0], self.Ni, self.Nj, self.Nk)
 
     @staticmethod
     def data_to_img(data, affine):
@@ -306,7 +318,7 @@ class Maps:
     @staticmethod
     def map_to_img(map, Ni, Nj, Nk, affine):
         '''
-            Convert a sparse matrix of shape (n_voxels, 1) into a nibabel Nifti1Image.
+            Convert a sparse matrix of shape (_n_voxels, 1) into a nibabel Nifti1Image.
 
             Ni, Nj, Nk are the size of the box used to index the flattened map matrix.
         '''
@@ -314,35 +326,37 @@ class Maps:
 
     def to_img(self, map_id=None):
         if map_id!=None:
-            return self.map_to_img(self.maps[:, map_id], self.Ni, self.Nj, self.Nk, self.affine)
+            return self.map_to_img(self._maps[:, map_id], self.Ni, self.Nj, self.Nk, self.affine)
 
-        if self.n_pmids > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self.n_pmids))
+        if self._n_pmids > 1:
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self._n_pmids))
 
-        return self.map_to_img(self.maps[0, map_id], self.Ni, self.Nj, self.Nk, self.affine)
+        return self.map_to_img(self._maps[:, 0], self.Ni, self.Nj, self.Nk, self.affine)
 
     def n_peaks(self):
         '''
             Returns a numpy array containing the number of peaks in each maps
         '''
-        e = scipy.sparse.csr_matrix(np.ones(self.n_voxels))
-        return np.array(e.dot(self.maps).toarray()[0])
+        e = scipy.sparse.csr_matrix(np.ones(self._n_voxels))
+        return np.array(e.dot(self._maps).toarray()[0])
 
     def sum(self):
         '''
             Builds the summed map of the given maps on the second axis.
 
-            maps : sparse CSR matrix of shape (n_voxels, n_pmids) where
-                n_voxels is the number of voxels in the box
-                n_pmids is the number of pmids
+            maps : sparse CSR matrix of shape (_n_voxels, _n_pmids) where
+                _n_voxels is the number of voxels in the box
+                _n_pmids is the number of pmids
 
-            Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened summed up map.
+            Returns a sparse CSR matrix of shape (_n_voxels, 1) representing the flattened summed up map.
         '''
-        e = scipy.sparse.csr_matrix(np.ones(self.n_pmids)).transpose()
+        e = scipy.sparse.csr_matrix(np.ones(self._n_pmids)).transpose()
 
-        # sum_map = Map()
+        sum_map = Maps()
+        sum_map.copy_header(self)
+        sum_map.maps = self._maps.dot(e)
 
-        return self.maps.dot(e)
+        return sum_map
 
     def normalize(self, inplace=False):
         '''
@@ -355,7 +369,7 @@ class Maps:
         else:
             new_maps = copy.copy(self)
 
-        new_maps.maps = self.maps.dot(diag)
+        new_maps.maps = self._maps.dot(diag)
 
         return new_maps
 
@@ -371,11 +385,11 @@ class Maps:
         '''
             Builds the average map of the given maps on the second axis.
 
-            maps : sparse CSR matrix of shape (n_voxels, n_pmids) where
-                n_voxels is the number of voxels in the box
-                n_pmids is the number of pmids
+            maps : sparse CSR matrix of shape (_n_voxels, _n_pmids) where
+                _n_voxels is the number of voxels in the box
+                _n_pmids is the number of pmids
 
-            Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened average map.
+            Returns a sparse CSR matrix of shape (_n_voxels, 1) representing the flattened average map.
         '''
         _, n_pmids = maps.shape
         e = scipy.sparse.csr_matrix(np.ones(n_pmids)/n_pmids).transpose()
@@ -383,7 +397,11 @@ class Maps:
         return maps.dot(e)
 
     def avg(self):
-        return self.average(self.maps)
+        avg_map = Maps()
+        avg_map.copy_header(self)
+        avg_map.maps = self.average(self.maps)
+
+        return avg_map
 
 
     @staticmethod
@@ -391,7 +409,7 @@ class Maps:
         '''
             Builds the variance map of the given maps on the second axis.
 
-            Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened variance map.
+            Returns a sparse CSR matrix of shape (_n_voxels, 1) representing the flattened variance map.
         '''
         avg_map = Maps.average(maps)
         maps_squared = maps.multiply(maps) # Squared element wise
@@ -402,21 +420,24 @@ class Maps:
         return avg_squared_map - squared_avg_map
 
     def var(self):
-        return self.variance(self.maps)
+        var_map = Maps()
+        var_map.copy_header(self)
+        var_map.maps = self.variance(self._maps)
+        return var_map
 
     def cov(self):
         '''
             Builds the empirical covariance matrix of the given maps on the second axis.
 
-            Returns a sparse CSR matrix of shape (n_voxels, n_voxels) representing the covariance matrix.
+            Returns a sparse CSR matrix of shape (_n_voxels, _n_voxels) representing the covariance matrix.
         '''
 
         # _, n_pmids = maps.shape 
 
-        e = scipy.sparse.csr_matrix(np.ones(self.n_pmids)/self.n_pmids).transpose()
+        e = scipy.sparse.csr_matrix(np.ones(self._n_pmids)/self._n_pmids).transpose()
 
-        M1 = self.maps.dot(self.maps.transpose())/self.n_pmids
-        M2 = self.maps.dot(e)
+        M1 = self._maps.dot(self._maps.transpose())/self._n_pmids
+        M2 = self._maps.dot(e)
 
         return M1 - M2.dot(M2.transpose())
 
@@ -461,20 +482,27 @@ if __name__ == '__main__':
     # maps = maps.normalize()
     maps.to_data(3)
     sum_map = maps.sum()
-    # sum_map = maps.var()
+    print(sum_map)
+    var_map = maps.var()
     # sum_map = maps.avg()
-    # avg_map = maps.avg()
+    avg_map = maps.avg()
     # img = Maps.map_to_img(avg_map, maps.Ni, maps.Nj, maps.Nk, maps.affine)
-    sum_data = Maps.map_to_data(sum_map, maps.Ni, maps.Nj, maps.Nk)
+    # sum_data = Maps.map_to_data(sum_map, maps.Ni, maps.Nj, maps.Nk)
+    sum_data = sum_map.to_data()
     sum_data = gaussian_filter(sum_data, sigma=sigma)
-    sum_img = Maps.data_to_img(sum_data, maps.affine)
+    # sum_img = Maps.data_to_img(sum_data, maps.affine)
+    sum_img = sum_map.to_img()
+    avg_img = avg_map.to_img()
+    var_img = var_map.to_img()
 
     # plot_activity_map(sum_img, threshold=0.000015)
+    # plot_activity_map(avg_img, threshold=0.00)
+    plot_activity_map(var_img, threshold=0.00)
     # plot_activity_map(sum_img, threshold=0.003)
     # plot_activity_map(img, threshold=0.00)
 
-    empty_maps = Maps()
-    empty_maps.copy_header(maps)
+    # empty_maps = Maps()
+    # empty_maps.copy_header(maps)
 
-    print(empty_maps)
+    # print(empty_maps)
 
