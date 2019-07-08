@@ -11,11 +11,12 @@ matplotlib.use('TkAgg')
 import scipy
 import multiprocessing
 from joblib import Parallel, delayed
+import copy
 # import ray
 
 from globals import mem, Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
-from tools import print_percent, index_3D_to_1D, sum_from_maps, map_to_data, data_to_img, map_to_img, normalize_maps
+from tools import print_percent, index_3D_to_1D, map_to_data, data_to_img, map_to_img
 
 matplotlib.use('TkAgg')
 print(matplotlib.get_backend())
@@ -241,6 +242,45 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
     return maps, Ni_r, Nj_r, Nk_r, affine_r
 
 
+class Maps:
+    def __init__(self, keyword):
+        maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
+        self.maps = maps
+        self.Ni = Ni_r
+        self.Nj = Nj_r
+        self.Nk = Nk_r
+        self.affine = affine_r
+
+    def sum(self):
+        '''
+            Builds the summed map of the given maps on the second axis.
+
+            maps : sparse CSR matrix of shape (n_voxels, n_pmids) where
+                n_voxels is the number of voxels in the box
+                n_pmids is the number of pmids
+
+            Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened summed up map.
+        '''
+        _, n_pmids = self.maps.shape
+        e = scipy.sparse.csr_matrix(np.ones(n_pmids)).transpose()
+
+        return self.maps.dot(e)
+
+    def normalize(self):
+        '''
+            Normalize each maps separatly so that each maps sums to 1.
+        '''
+        n_voxels, _ = self.maps.shape
+        e = scipy.sparse.csr_matrix(np.ones(n_voxels))
+        n_peaks = e.dot(self.maps)
+        diag = scipy.sparse.diags((n_peaks.power(-1)).toarray()[0])
+
+        new_maps = copy.copy(self)
+        new_maps.maps = self.maps.dot(diag)
+
+        return new_maps
+
+
 if __name__ == '__main__':
     pmid = 22266924
     keyword = 'prosopagnosia'
@@ -258,21 +298,35 @@ if __name__ == '__main__':
 
     # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
 
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
-    print(maps)
-    # print(maps.shape)
-    # print(Ni_r, Nj_r, Nk_r)
+    # maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
+    # print(maps)
+    # # print(maps.shape)
+    # # print(Ni_r, Nj_r, Nk_r)
 
-    maps = normalize_maps(maps)
-    sum_map = sum_from_maps(maps)
-    sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
-    sum_data = gaussian_filter(sum_data, sigma=sigma)
-    sum_img = data_to_img(sum_data, affine_r)
+    # maps = normalize_maps(maps)
+    # sum_map = sum_from_maps(maps)
+    # sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
+    # sum_data = gaussian_filter(sum_data, sigma=sigma)
+    # sum_img = data_to_img(sum_data, affine_r)
 
-    # sum_img, n_peaks = build_activity_map_from_keyword(keyword, normalize=False, sigma=sigma)
+    # # sum_img, n_peaks = build_activity_map_from_keyword(keyword, normalize=False, sigma=sigma)
 
-    # plot_activity_map(sum_img, threshold=0.04)
-    plot_activity_map(sum_img, threshold=0.003)
+    # # plot_activity_map(sum_img, threshold=0.04)
+    # plot_activity_map(sum_img, threshold=0.003)
 
     # plot_activity_map(map_to_img(sum_from_maps(maps), Ni_r, Nj_r, Nk_r, affine_r), threshold=0.4)
+
+    maps = Maps(keyword)
+    print(maps.Ni)
+    maps = maps.normalize()
+    print(maps.Ni)
+    sum_map = maps.sum()
+    print(maps.Ni)
+    sum_data = map_to_data(sum_map, maps.Ni, maps.Nj, maps.Nk)
+    sum_data = gaussian_filter(sum_data, sigma=sigma)
+    sum_img = data_to_img(sum_data, maps.affine)
+
+    plot_activity_map(sum_img, threshold=0.003)
+
+
 
