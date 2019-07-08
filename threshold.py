@@ -120,7 +120,7 @@ def estimate_threshold_covariance(n_peaks, Ni, Nj, Nk, N_simulations=5000, apply
 
 def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma):
     random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps)
-    avg_map, var_map = random_maps.iterative_smooth_avg_var()
+    avg_map, var_map = random_maps.iterative_smooth_avg_var(sigma)
     return avg_map.max(), var_map.max()
 
 def avg_var_threshold_MC_pool(N_sim, kwargs):
@@ -158,8 +158,8 @@ def avg_var_threshold_MC(n_peaks, n_maps, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=500
     print(result)
     avgs, vars = result[0], result[1]
 
-    avg_threshold = np.mean(avgs)
-    var_threshold = np.mean(vars)
+    avg_threshold = np.percentile(avgs, .95)
+    var_threshold = np.percentile(vars, .95)
 
     print('Time for MC threshold estimation : {}'.format(time()-time0))
     print('Estimated avg threshold : {}'.format(avg_threshold))
