@@ -124,6 +124,14 @@ def sum_from_maps(maps):
 
     return maps.dot(e)
 
+def normalize_maps(maps):
+    n_voxels, _ = maps.shape
+    e = scipy.sparse.csr_matrix(np.ones(n_voxels))
+    n_peaks = e.dot(maps)
+    diag = scipy.sparse.diags((n_peaks.power(-1)).toarray()[0])
+
+    return maps.dot(diag)
+
 if __name__ == '__main__':
     i, j, k = 3, 4, 5
 
