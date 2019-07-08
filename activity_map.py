@@ -243,14 +243,26 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
 
 
 class Maps:
-    def __init__(self, keyword):
-        maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
+    def __init__(self, keyword=None):
+        if keyword != None:
+            maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
+            self.n_voxels, self.n_pmids = maps.shape
+        else:
+            maps, Ni_r, Nj_r, Nk_r, affine_r = None, None, None, None, None
+            self.n_voxels, self.n_pmids = None, None
+
         self.maps = maps
-        self.n_voxels, self.n_pmids = maps.shape
         self.Ni = Ni_r
         self.Nj = Nj_r
         self.Nk = Nk_r
         self.affine = affine_r
+
+    def copy_header(self, other):
+        self.n_voxels, self.n_pmids = other.n_voxels, other.n_pmids
+        self.Ni = other.Ni
+        self.Nj = other.Nj
+        self.Nk = other.Nk
+        self.affine = other.affine
 
     @staticmethod
     def map_to_data(map, Ni, Nj, Nk):
@@ -318,6 +330,8 @@ class Maps:
             Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened summed up map.
         '''
         e = scipy.sparse.csr_matrix(np.ones(self.n_pmids)).transpose()
+
+        # sum_map = Map()
 
         return self.maps.dot(e)
 
@@ -439,15 +453,18 @@ if __name__ == '__main__':
     sum_map = maps.sum()
     # sum_map = maps.var()
     # sum_map = maps.avg()
-    avg_map = maps.avg()
-    img = Maps.map_to_img(avg_map, maps.Ni, maps.Nj, maps.Nk, maps.affine)
+    # avg_map = maps.avg()
+    # img = Maps.map_to_img(avg_map, maps.Ni, maps.Nj, maps.Nk, maps.affine)
     sum_data = Maps.map_to_data(sum_map, maps.Ni, maps.Nj, maps.Nk)
     sum_data = gaussian_filter(sum_data, sigma=sigma)
     sum_img = Maps.data_to_img(sum_data, maps.affine)
 
     # plot_activity_map(sum_img, threshold=0.000015)
     # plot_activity_map(sum_img, threshold=0.003)
-    plot_activity_map(img, threshold=0.00)
+    # plot_activity_map(img, threshold=0.00)
+
+    empty_maps = Maps()
+    empty_maps.copy_header(maps)
 
 
 
