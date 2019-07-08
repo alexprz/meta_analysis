@@ -15,7 +15,7 @@ from joblib import Parallel, delayed
 
 from globals import mem, Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
-from tools import print_percent, index_3D_to_1D, sum_from_maps, map_to_data, data_to_img, map_to_img
+from tools import print_percent, index_3D_to_1D, sum_from_maps, map_to_data, data_to_img, map_to_img, normalize_maps
 
 matplotlib.use('TkAgg')
 print(matplotlib.get_backend())
@@ -135,11 +135,12 @@ def plot_activity_map(stat_img, threshold=0., glass_brain=False):
 
 #     return avg_gauss_img, avg_img, n_samples
 
-def build_activity_map_from_keyword(keyword, sigma=1., gray_matter_mask=None):
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, gray_matter_mask=gray_matter_mask)
+def build_activity_map_from_keyword(keyword, normalize=False, sigma=1., gray_matter_mask=None):
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=normalize, gray_matter_mask=gray_matter_mask)
     
 
     sum_map = sum_from_maps(maps)
+    print(sum_map)
     sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
     sum_data = gaussian_filter(sum_data, sigma=sigma)
     sum_img = data_to_img(sum_data, affine_r)
@@ -150,7 +151,7 @@ def build_activity_map_from_keyword(keyword, sigma=1., gray_matter_mask=None):
 
     return sum_img, n_peaks
 
-def compute_maps(pmids, Ni, Nj, Nk, inv_affine, sigma, keyword):
+def compute_maps(pmids, Ni, Nj, Nk, inv_affine, normalize, sigma, keyword):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
         Used for multiprocessing in get_all_maps_associated_to_keyword function.
@@ -168,11 +169,24 @@ def compute_maps(pmids, Ni, Nj, Nk, inv_affine, sigma, keyword):
     for count, pmid in enumerate(pmids):
 
         print_percent(count, n_pmids, prefix='Building maps associated to {} '.format(keyword))
-        for index, row in coordinates.loc[coordinates['pmid'] == pmid].iterrows():
+        coordinates_of_interest = coordinates.loc[coordinates['pmid'] == pmid]
+        n_peaks = len(coordinates_of_interest)
+
+        for index, row in coordinates_of_interest.iterrows():
             x, y, z = row['x'], row['y'], row['z']
             i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
             p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
-            maps[count, p] += 1
+
+            if normalize:
+                # print(normalize)
+                maps[count, p] += 1./n_peaks
+            else:
+                maps[count, p] += 1
+
+
+        # if normalize:
+        #     print(n_peaks)
+        #     maps[count, :]/=n_peaks
 
         if sigma != None:
             data = maps[count, :].toarray().reshape((Ni, Nj, Nk), order='F')
@@ -181,8 +195,8 @@ def compute_maps(pmids, Ni, Nj, Nk, inv_affine, sigma, keyword):
 
     return maps
 
-@mem.cache
-def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None, sigma=None):
+# @mem.cache
+def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None, normalize=False, sigma=None):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
@@ -216,7 +230,7 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
     n_jobs = multiprocessing.cpu_count()-1
     splitted_array = np.array_split(np.array(nonzero_pmids), n_jobs)
     
-    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine_r, sigma, keyword) for sub_array in splitted_array)
+    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_array, Ni_r, Nj_r, Nk_r, inv_affine_r, normalize, sigma, keyword) for sub_array in splitted_array)
     
     print('Stacking...')
     maps = scipy.sparse.vstack(results)
@@ -244,19 +258,21 @@ if __name__ == '__main__':
 
     # plot_activity_map(avg_img, glass_brain=False, threshold=0.)
 
-    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, reduce=1, sigma=None)
+    maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
     print(maps)
-    print(maps.shape)
-    print(Ni_r, Nj_r, Nk_r)
+    # print(maps.shape)
+    # print(Ni_r, Nj_r, Nk_r)
 
-    # sum_map = sum_from_maps(maps)
-    # sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
-    # sum_data = gaussian_filter(sum_data, sigma=sigma)
-    # sum_img = data_to_img(sum_data, affine_r)
+    maps = normalize_maps(maps)
+    sum_map = sum_from_maps(maps)
+    sum_data = map_to_data(sum_map, Ni_r, Nj_r, Nk_r)
+    sum_data = gaussian_filter(sum_data, sigma=sigma)
+    sum_img = data_to_img(sum_data, affine_r)
 
-    sum_img = build_activity_map_from_keyword(keyword, sigma=sigma)
+    # sum_img, n_peaks = build_activity_map_from_keyword(keyword, normalize=False, sigma=sigma)
 
-    plot_activity_map(sum_img, threshold=0.4)
+    # plot_activity_map(sum_img, threshold=0.04)
+    plot_activity_map(sum_img, threshold=0.003)
 
     # plot_activity_map(map_to_img(sum_from_maps(maps), Ni_r, Nj_r, Nk_r, affine_r), threshold=0.4)
 
