@@ -249,7 +249,7 @@ class Maps:
             self.n_voxels, self.n_pmids = maps.shape
         else:
             maps, Ni_r, Nj_r, Nk_r, affine_r = None, None, None, None, None
-            self.n_voxels, self.n_pmids = None, None
+            self.n_voxels, self.n_pmids = 0, 0
 
         self.maps = maps
         self.Ni = Ni_r
@@ -263,6 +263,15 @@ class Maps:
         self.Nj = other.Nj
         self.Nk = other.Nk
         self.affine = other.affine
+
+    def __str__(self):
+        string = '\nMaps object containing {} maps.\n'
+        string += '____________Header_____________\n'
+        string += 'N voxels : {}\n'
+        string += 'N pmids : {}\n'
+        string += 'Box size : ({}, {}, {})\n'
+        string += 'Affine :\n{}\n'
+        return string.format(self.n_pmids, self.n_voxels, self.n_pmids, self.Ni, self.Nj, self.Nk, self.affine)
 
     @staticmethod
     def map_to_data(map, Ni, Nj, Nk):
@@ -447,6 +456,7 @@ if __name__ == '__main__':
     # plot_activity_map(map_to_img(sum_from_maps(maps), Ni_r, Nj_r, Nk_r, affine_r), threshold=0.4)
 
     maps = Maps(keyword)
+    print(maps.Ni*maps.Nj*maps.Nk)
     maps.normalize(inplace=True)
     # maps = maps.normalize()
     maps.to_data(3)
@@ -466,5 +476,5 @@ if __name__ == '__main__':
     empty_maps = Maps()
     empty_maps.copy_header(maps)
 
-
+    print(empty_maps)
 
