@@ -246,10 +246,18 @@ class Maps:
     def __init__(self, keyword):
         maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=False, reduce=1, sigma=None)
         self.maps = maps
+        self.n_voxels, self.n_pmids = maps.shape
         self.Ni = Ni_r
         self.Nj = Nj_r
         self.Nk = Nk_r
         self.affine = affine_r
+
+    def n_peaks(self):
+        '''
+            Returns a numpy array containing the number of peaks in each maps
+        '''
+        e = scipy.sparse.csr_matrix(np.ones(self.n_voxels))
+        return np.array(e.dot(self.maps).toarray()[0])
 
     def sum(self):
         '''
@@ -261,21 +269,21 @@ class Maps:
 
             Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened summed up map.
         '''
-        _, n_pmids = self.maps.shape
-        e = scipy.sparse.csr_matrix(np.ones(n_pmids)).transpose()
+        e = scipy.sparse.csr_matrix(np.ones(self.n_pmids)).transpose()
 
         return self.maps.dot(e)
 
-    def normalize(self):
+    def normalize(self, inplace=False):
         '''
             Normalize each maps separatly so that each maps sums to 1.
         '''
-        n_voxels, _ = self.maps.shape
-        e = scipy.sparse.csr_matrix(np.ones(n_voxels))
-        n_peaks = e.dot(self.maps)
-        diag = scipy.sparse.diags((n_peaks.power(-1)).toarray()[0])
+        diag = scipy.sparse.diags(np.power(self.n_peaks(), -1))
 
-        new_maps = copy.copy(self)
+        if inplace:
+            new_maps = self
+        else:
+            new_maps = copy.copy(self)
+
         new_maps.maps = self.maps.dot(diag)
 
         return new_maps
@@ -318,7 +326,8 @@ if __name__ == '__main__':
 
     maps = Maps(keyword)
     print(maps.Ni)
-    maps = maps.normalize()
+    maps.normalize(inplace=True)
+    # maps = maps.normalize()
     print(maps.Ni)
     sum_map = maps.sum()
     print(maps.Ni)
