@@ -3,9 +3,11 @@ from joblib import Parallel, delayed
 from time import time
 import numpy as np
 from scipy.ndimage import gaussian_filter
+import itertools
 
 from globals import mem, Ni, Nj, Nk, gray_mask
-from tools import print_percent, empirical_cov_matrix
+from tools import print_percent
+from activity_map import Maps
 
 
 def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
@@ -30,23 +32,23 @@ def simulate_N_maps_joblib(N_sim, kwargs):
         print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(n_peaks))
     return peaks
 
-def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
-    '''
-        Generate N_simulation maps under the null hypothesis.
-        Take the 95% percentile of the maxima encoutered.
-    '''
-    max_peaks = np.zeros(N_simulations)
-    time0 = time()
+# def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
+#     '''
+#         Generate N_simulation maps under the null hypothesis.
+#         Take the 95% percentile of the maxima encoutered.
+#     '''
+#     max_peaks = np.zeros(N_simulations)
+#     time0 = time()
 
-    for k in range(N_simulations):
-        print(k)
-        max_peaks[k] = simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma=sigma)
+#     for k in range(N_simulations):
+#         print(k)
+#         max_peaks[k] = simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma=sigma)
 
-    estimated_threshold = np.mean(max_peaks)
+#     estimated_threshold = np.mean(max_peaks)
 
-    print('Time for MC threshold estimation : {}'.format(time()-time0))
-    print('Estimated threshold : {}'.format(estimated_threshold))
-    return estimated_threshold
+#     print('Time for MC threshold estimation : {}'.format(time()-time0))
+#     print('Estimated threshold : {}'.format(estimated_threshold))
+#     return estimated_threshold
 
 @mem.cache
 def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
@@ -116,8 +118,58 @@ def estimate_threshold_covariance(n_peaks, Ni, Nj, Nk, N_simulations=5000, apply
     return np.max(cov_matrix)
     # return np.percentile(cov_matrix, .9999)
 
+def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma):
+    random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps)
+    avg_map, var_map = random_maps.iterative_smooth_avg_var()
+    return avg_map.max(), var_map.max()
+
+def avg_var_threshold_MC_pool(N_sim, kwargs):
+    '''
+        Equivalent to simulate_max_peaks function called N_sim times.
+        (Used for multiprocessing with joblib)
+    '''
+    avgs, vars = np.zeros(N_sim), np.zeros(N_sim)
+    n_peaks, n_maps, Ni, Nj, Nk, sigma = kwargs['n_peaks'], kwargs['n_maps'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma']
+    for k in range(N_sim):
+        avgs[k], vars[k] = simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma)
+        print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(n_peaks))
+    return avgs, vars
+
+@mem.cache
+def avg_var_threshold_MC(n_peaks, n_maps, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
+    '''
+        Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
+    '''
+    time0 = time()
+    nb_processes=multiprocessing.cpu_count()//2
+
+    kwargs = {
+        'Ni': Ni,
+        'Nj': Nj,
+        'Nk': Nk,
+        'sigma': sigma,
+        'n_peaks': n_peaks,
+        'n_maps': n_maps
+    }
+
+    n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
+
+    result = np.concatenate(Parallel(n_jobs=nb_processes, backend='multiprocessing')(delayed(avg_var_threshold_MC_pool)(n, kwargs) for n in n_list), axis=1)
+    print(result)
+    avgs, vars = result[0], result[1]
+
+    avg_threshold = np.mean(avgs)
+    var_threshold = np.mean(vars)
+
+    print('Time for MC threshold estimation : {}'.format(time()-time0))
+    print('Estimated avg threshold : {}'.format(avg_threshold))
+    print('Estimated var threshold : {}'.format(var_threshold))
+    return avg_threshold, var_threshold
+
 if __name__ == '__main__':
     nb_peaks = 2798
     sigma = 1.5
     # print(estimate_threshold_monte_carlo_joblib(nb_peaks, Ni, Nj, Nk, N_simulations=100, sigma=sigma))
-    print(estimate_threshold_covariance(nb_peaks, Ni//10, Nj//10, Nk//10, N_simulations=5000, sigma=sigma))
+    # print(estimate_threshold_covariance(nb_peaks, Ni//10, Nj//10, Nk//10, N_simulations=5000, sigma=sigma))
+
+    print(avg_var_threshold_MC(10000, 10, N_simulations=100, sigma=2.))
