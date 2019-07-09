@@ -145,7 +145,7 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
 class Maps:
     def __init__(self, keyword_or_shape=None, reduce=1, normalize=False, sigma=None, Ni=None, Nj=None, Nk=None, affine=None):
         if isinstance(keyword_or_shape, str):
-            maps, Ni, Nj, Nk, affine = get_all_maps_associated_to_keyword(keyword, normalize=normalize, reduce=reduce, sigma=sigma)
+            maps, Ni, Nj, Nk, affine = get_all_maps_associated_to_keyword(keyword_or_shape, normalize=normalize, reduce=reduce, sigma=sigma)
             self.n_voxels, self.n_pmids = maps.shape
         
         elif isinstance(keyword_or_shape, tuple):
@@ -288,7 +288,7 @@ class Maps:
         '''
         return self.maps.max()
 
-    def sum(self):
+    def summed_map(self):
         '''
             Builds the summed map of the given maps on the second axis.
 
@@ -305,6 +305,10 @@ class Maps:
         sum_map.maps = self._maps.dot(e)
 
         return sum_map
+
+    def sum(self, **kwargs):
+        return self.maps.sum(**kwargs)
+
 
     def normalize(self, inplace=False):
         '''
