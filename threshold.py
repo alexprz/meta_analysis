@@ -10,27 +10,27 @@ from tools import print_percent
 from activity_map import Maps
 
 
-def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
-    '''
-        Simulate a map under the null hypothesis and smooth it with a gaussian kernel (ALE method)
-        Return the max encountered.
-    '''
-    brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
-    brain_map = np.ma.masked_array(brain_map, np.logical_not(gray_mask.get_data()))
-    brain_map = gaussian_filter(brain_map, sigma=sigma)
-    return np.max(brain_map)
+# def simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma):
+#     '''
+#         Simulate a map under the null hypothesis and smooth it with a gaussian kernel (ALE method)
+#         Return the max encountered.
+#     '''
+#     brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
+#     brain_map = np.ma.masked_array(brain_map, np.logical_not(gray_mask.get_data()))
+#     brain_map = gaussian_filter(brain_map, sigma=sigma)
+#     return np.max(brain_map)
 
-def simulate_N_maps_joblib(N_sim, kwargs):
-    '''
-        Equivalent to simulate_max_peaks function called N_sim times.
-        (Used for multiprocessing with joblib)
-    '''
-    peaks = np.zeros(N_sim)
-    n_peaks, Ni, Nj, Nk, sigma = kwargs['n_peaks'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma']
-    for k in range(N_sim):
-        peaks[k] = simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma)
-        print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(n_peaks))
-    return peaks
+# def simulate_N_maps_joblib(N_sim, kwargs):
+#     '''
+#         Equivalent to simulate_max_peaks function called N_sim times.
+#         (Used for multiprocessing with joblib)
+#     '''
+#     peaks = np.zeros(N_sim)
+#     n_peaks, Ni, Nj, Nk, sigma = kwargs['n_peaks'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma']
+#     for k in range(N_sim):
+#         peaks[k] = simulate_max_peaks(n_peaks, Ni, Nj, Nk, sigma)
+#         print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(n_peaks))
+#     return peaks
 
 # def estimate_threshold_monte_carlo(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
 #     '''
@@ -50,31 +50,31 @@ def simulate_N_maps_joblib(N_sim, kwargs):
 #     print('Estimated threshold : {}'.format(estimated_threshold))
 #     return estimated_threshold
 
-@mem.cache
-def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
-    '''
-        Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
-    '''
-    time0 = time()
-    nb_processes=multiprocessing.cpu_count()-1
+# @mem.cache
+# def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
+#     '''
+#         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
+#     '''
+#     time0 = time()
+#     nb_processes=multiprocessing.cpu_count()-1
 
-    kwargs = {
-        'Ni': Ni,
-        'Nj': Nj,
-        'Nk': Nk,
-        'sigma': sigma,
-        'n_peaks': n_peaks
-    }
+#     kwargs = {
+#         'Ni': Ni,
+#         'Nj': Nj,
+#         'Nk': Nk,
+#         'sigma': sigma,
+#         'n_peaks': n_peaks
+#     }
 
-    n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
+#     n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
 
-    result = Parallel(n_jobs=nb_processes, backend='multiprocessing')(delayed(simulate_N_maps_joblib)(n, kwargs) for n in n_list)
+#     result = Parallel(n_jobs=nb_processes, backend='multiprocessing')(delayed(simulate_N_maps_joblib)(n, kwargs) for n in n_list)
 
-    estimated_threshold = np.mean(result)
+#     estimated_threshold = np.mean(result)
 
-    print('Time for MC threshold estimation : {}'.format(time()-time0))
-    print('Estimated threshold : {}'.format(estimated_threshold))
-    return estimated_threshold
+#     print('Time for MC threshold estimation : {}'.format(time()-time0))
+#     print('Estimated threshold : {}'.format(estimated_threshold))
+#     return estimated_threshold
 
 # def compute_random_map(pmid_enumerate, n_voxels, Ni_r, Nj_r, Nk_r, inv_affine_r, gaussian_filter):
 #     n_tot = len(pmid_enumerate)
@@ -100,43 +100,43 @@ def estimate_threshold_monte_carlo_joblib(n_peaks, Ni=Ni, Nj=Nj, Nk=Nk, N_simula
 
 #     return observations_
 
-@mem.cache
-def estimate_threshold_covariance(n_peaks, Ni, Nj, Nk, N_simulations=5000, apply_gaussian_filter=False, sigma=2.):
-    n_voxels = Ni*Nj*Nk
-    for k in range(N_simulations):
-        print(k)
-        observations = np.zeros((N_simulations, n_voxels))
-        brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
-        # brain_map = np.ma.masked_array(brain_map, np.logical_not(gray_mask.get_data()))
-        if apply_gaussian_filter:
-            brain_map = gaussian_filter(brain_map, sigma=sigma)
+# @mem.cache
+# def estimate_threshold_covariance(n_peaks, Ni, Nj, Nk, N_simulations=5000, apply_gaussian_filter=False, sigma=2.):
+#     n_voxels = Ni*Nj*Nk
+#     for k in range(N_simulations):
+#         print(k)
+#         observations = np.zeros((N_simulations, n_voxels))
+#         brain_map = np.random.binomial(n=n_peaks, p=1./(Ni*Nj*Nk), size=(Ni, Nj, Nk)).astype(float)
+#         # brain_map = np.ma.masked_array(brain_map, np.logical_not(gray_mask.get_data()))
+#         if apply_gaussian_filter:
+#             brain_map = gaussian_filter(brain_map, sigma=sigma)
 
-        observations[k, :] = brain_map.reshape(-1)
+#         observations[k, :] = brain_map.reshape(-1)
 
-    cov_matrix = empirical_cov_matrix(observations).toarray()
+#     cov_matrix = empirical_cov_matrix(observations).toarray()
 
-    return np.max(cov_matrix)
-    # return np.percentile(cov_matrix, .9999)
+#     return np.max(cov_matrix)
+#     # return np.percentile(cov_matrix, .9999)
 
-def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma):
+def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose):
     random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps)
-    avg_map, var_map = random_maps.iterative_smooth_avg_var(sigma)
+    avg_map, var_map = random_maps.iterative_smooth_avg_var(sigma, verbose=verbose)
     return avg_map.max(), var_map.max()
 
 def avg_var_threshold_MC_pool(N_sim, kwargs):
     '''
-        Equivalent to simulate_max_peaks function called N_sim times.
+        Equivalent to avg_var_threshold_MC function called N_sim times.
         (Used for multiprocessing with joblib)
     '''
     avgs, vars = np.zeros(N_sim), np.zeros(N_sim)
-    n_peaks, n_maps, Ni, Nj, Nk, sigma = kwargs['n_peaks'], kwargs['n_maps'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma']
+    n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose = kwargs['n_peaks'], kwargs['n_maps'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma'], kwargs['verbose']
     for k in range(N_sim):
-        avgs[k], vars[k] = simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma)
+        avgs[k], vars[k] = simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose)
         print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(n_peaks))
     return avgs, vars
 
 @mem.cache
-def avg_var_threshold_MC(n_peaks, n_maps, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1.):
+def avg_var_threshold_MC(n_peaks, n_maps, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1., verbose=False):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''
@@ -149,7 +149,8 @@ def avg_var_threshold_MC(n_peaks, n_maps, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=500
         'Nk': Nk,
         'sigma': sigma,
         'n_peaks': n_peaks,
-        'n_maps': n_maps
+        'n_maps': n_maps,
+        'verbose': verbose
     }
 
     n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
@@ -158,8 +159,8 @@ def avg_var_threshold_MC(n_peaks, n_maps, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=500
     print(result)
     avgs, vars = result[0], result[1]
 
-    avg_threshold = np.percentile(avgs, .95)
-    var_threshold = np.percentile(vars, .95)
+    avg_threshold = np.percentile(avgs, .99)
+    var_threshold = np.percentile(vars, .99)
 
     print('Time for MC threshold estimation : {}'.format(time()-time0))
     print('Estimated avg threshold : {}'.format(avg_threshold))
