@@ -27,18 +27,6 @@ def build_index(file_path):
     
     return encode, decode
 
-# def empirical_cov_matrix(observations):
-#     n_observations = observations.shape[0]
-
-#     s_X = scipy.sparse.csr_matrix(observations)
-#     s_Ones = scipy.sparse.csr_matrix(np.ones(n_observations))
-
-#     M1 = s_X.transpose().dot(s_X)
-#     M2 = (s_Ones.dot(s_X)).transpose()
-#     M3 = s_Ones.dot(s_X)
-
-#     return M1/n_observations - M2.dot(M3)/(n_observations**2)
-
 def index_3D_to_1D(i, j, k, Ni, Nj, Nk):
     '''
         Changes indexing from 3D to 1D Fortran like (first index moving fastest).
@@ -82,55 +70,6 @@ def index_1D_to_3D_checked(p, Ni, Nj, Nk):
 
     return index_1D_to_3D(p, Ni, Nj, Nk)
 
-def map_to_data(map, Ni, Nj, Nk):
-    '''
-        Convert a sparse matrix of shape (n_voxels, 1) into a dense 3D numpy array of shape (Ni, Nj, Nk).
-
-        Indexing of map is supposed to have been made Fortran like (first index moving fastest).
-    '''
-    n_voxels, _ = map.shape
-
-    if n_voxels != Ni*Nj*Nk:
-        raise ValueError('Map\'s length ({}) does not match given box ({}, {}, {}) of size {}'.format(n_voxels, Ni, Nj, Nk, Ni*Nj*Nk))
-
-    return map.toarray().reshape((Ni, Nj, Nk), order='F')
-
-def data_to_img(data, affine):
-    '''
-        Convert a dense 3D data array into a nibabel Nifti1Image.
-    '''
-    return nib.Nifti1Image(data, affine)
-
-def map_to_img(map, Ni, Nj, Nk, affine):
-    '''
-        Convert a sparse matrix of shape (n_voxels, 1) into a nibabel Nifti1Image.
-
-        Ni, Nj, Nk are the size of the box used to index the flattened map matrix.
-    '''
-    return data_to_img(map_to_data(map, Ni, Nj, Nk), affine)
-
-def sum_from_maps(maps):
-    '''
-        Builds the summed map of the given maps on the second axis.
-
-        maps : sparse CSR matrix of shape (n_voxels, n_pmids) where
-            n_voxels is the number of voxels in the box
-            n_pmids is the number of pmids
-
-        Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened summed up map.
-    '''
-    _, n_pmids = maps.shape
-    e = scipy.sparse.csr_matrix(np.ones(n_pmids)).transpose()
-
-    return maps.dot(e)
-
-def normalize_maps(maps):
-    n_voxels, _ = maps.shape
-    e = scipy.sparse.csr_matrix(np.ones(n_voxels))
-    n_peaks = e.dot(maps)
-    diag = scipy.sparse.diags((n_peaks.power(-1)).toarray()[0])
-
-    return maps.dot(diag)
 
 if __name__ == '__main__':
     i, j, k = 3, 4, 5
