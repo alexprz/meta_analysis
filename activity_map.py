@@ -412,7 +412,10 @@ class Maps:
         # avg_n.maps = self[0]
         # var_n = Maps(self.n_voxels).copy_header(self)
 
-        avg_map_n = copy.copy(self[0])
+        current_map = self[0]
+        if sigma != None:
+            current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
+        avg_map_n = copy.copy(current_map)
         var_map_n = Maps.zeros(self.n_voxels).maps
 
         for k in range(2, self.n_pmids+1):
@@ -479,8 +482,8 @@ if __name__ == '__main__':
     # img = metaanalysis_img_from_keyword(keyword, sigma=sigma)
     # plot_activity_map(img, threshold=0.00065)
 
-    rand_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk, affine=affine).randomize(100000, 10)
-    print(rand_maps)
+    # rand_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk, affine=affine).randomize(100000, 10)
+    # print(rand_maps)
     # M1 = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(100000, 10)
     # M2 = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(100000, 10)
     # print(M1)
@@ -490,9 +493,9 @@ if __name__ == '__main__':
 
     # rand_maps.smooth(sigma=sigma, verbose=True, inplace=True)
 
-    avg, var = rand_maps.iterative_smooth_avg_var(sigma=sigma, verbose=True)
+    # avg, var = rand_maps.iterative_smooth_avg_var(sigma=sigma, verbose=True)
 
-    print(avg)
+    # print(avg)
 
     # maps = Maps(keyword)
     # maps_smoothed = Maps(keyword, sigma=2.)
@@ -507,5 +510,24 @@ if __name__ == '__main__':
     # plot_activity_map(var_map_2.to_img(), threshold=0.00003)
 
     # print(var_map)    
-    # print(var_map_2)    
+    # print(var_map_2)   
+
+    maps = Maps(keyword, sigma=None, normalize=False)
+    maps_smoothed = Maps(keyword, sigma=sigma, normalize=False)
+
+    avg, var = maps.iterative_smooth_avg_var(sigma=sigma, verbose=True)
+    avg2 = maps_smoothed.avg()
+    var2 = maps_smoothed.var()
+
+    print(avg)
+    print(avg2)
+    print(var)
+    print(var2)
+
+    plot_activity_map(avg2.to_img(), threshold=0.0003)
+    plot_activity_map(avg.to_img(), threshold=0.0003)
+
+    plot_activity_map(var2.to_img(), threshold=0.000005) 
+    plot_activity_map(var.to_img(), threshold=0.000005) 
+
 
