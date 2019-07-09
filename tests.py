@@ -139,30 +139,31 @@ class TestIterativeAvgVar(unittest.TestCase):
         self.assertTrue(np.allclose(expected_avg_map.toarray(), avg_map.maps.toarray()))
         self.assertTrue(np.allclose(arr1, arr2))
 
-    # @given(args = random_maps(),
-    #        sigma = strats.floats(min_value=0.1, max_value=10.))
-    # @settings(max_examples=100, deadline=1000)
-    # def test_with_smoothing(self, args, sigma):
-    #     maps, Ni, Nj, Nk = args
+    @given(args = random_maps(),
+           sigma = strats.floats(min_value=0.1, max_value=10.))
+    @settings(max_examples=100, deadline=1000)
+    def test_with_smoothing(self, args, sigma):
+        maps, Ni, Nj, Nk = args
 
-    #     maps_aux = copy.copy(maps)
-    #     smoothed_maps = maps.smooth(sigma=sigma)
+        maps_aux = copy.copy(maps)
+        smoothed_maps = maps.smooth(sigma=sigma)
 
-    #     expected_avg = smoothed_maps.avg()
-    #     # expected_var_map = smoothed_maps.var().maps
-    #     # print(maps)
-    #     avg, var = maps_aux.iterative_smooth_avg_var(sigma=sigma)
+        expected_avg = smoothed_maps.avg()
+        expected_var = smoothed_maps.var()
+        # print(maps)
+        avg, var = maps_aux.iterative_smooth_avg_var(sigma=sigma)
 
 
-    #     print('Arr 1 :\n{}'.format(expected_avg))
-    #     print('Arr 2 :\n{}'.format(avg))
-    #     # arr1 = expected_var_map.toarray()
-    #     # arr2 = var_map.maps.toarray()
-    #     # print('Arr1 \n{}'.format(arr1))
-    #     # print('Arr 2 \n{}'.format(arr2))
+        # print('Arr 1 :\n{}'.format(expected_avg))
+        # print('Arr 2 :\n{}'.format(avg))
+        # arr1 = expected_var_map.toarray()
+        # arr2 = var_map.maps.toarray()
+        # print('Arr1 \n{}'.format(arr1))
+        # print('Arr 2 \n{}'.format(arr2))
 
-    #     self.assertTrue(np.allclose(expected_avg.maps.toarray(), avg.maps.toarray()))
-    #     # self.assertTrue(np.allclose(arr1, arr2))
+        self.assertTrue(np.allclose(expected_avg.maps.toarray(), avg.maps.toarray()))
+        self.assertTrue(np.allclose(expected_var.maps.toarray(), var.maps.toarray()))
+        # self.assertTrue(np.allclose(arr1, arr2))
 
 
 
