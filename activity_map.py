@@ -12,7 +12,6 @@ import scipy
 import multiprocessing
 from joblib import Parallel, delayed
 import copy
-# import ray
 
 from globals import mem, Ni, Nj, Nk, coordinates, corpus_tfidf, affine, inv_affine, gray_mask
 from builds import encode_feature, decode_feature, encode_pmid, decode_pmid
@@ -58,83 +57,6 @@ def plot_activity_map(stat_img, threshold=0., glass_brain=False):
         plotting.plot_stat_map(stat_img, black_bg=True, threshold=threshold)#*np.max(stat_img.get_data()))#, threshold=threshold)#threshold*np.max(stat_img.get_data()))
     plotting.show()
     plt.show()
-
-# def build_activity_map_from_keyword(keyword, sigma=1, gray_matter_mask=True):
-#     '''
-#         From the given keyword, build its metaanalysis activity map from all related pmids.
-
-#         sigma : std of the gaussian blurr
-#         gray_matter_mask : specify whether the map is restrained to the gray matter or not
-
-#         return (stat_img, hist_img, n_samples)
-#         stat_img : Nifti1Image object, the map where frequencies are added for each activation
-#         hist_img : Nifti1Image object, the map where 1 is added for each activation
-#         n_samples : nb of pmids related to the keyword
-#     '''
-#     time0 = time()
-    
-#     feature_id = encode_feature[keyword]
-
-#     print('Get nonzero pmid')
-#     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, feature_id].nonzero()[0]])
-#     n_samples = len(nonzero_pmids)
-
-#     freq_img_data = np.zeros((Ni,Nj,Nk)) # Building blank img with MNI152's shape
-#     hist_img_data = np.zeros((Ni,Nj,Nk)) # Building blank img with MNI152's shape
-    
-#     print('Get nonzero coordinates')
-#     nonzero_coordinates = coordinates.loc[coordinates['pmid'].isin(nonzero_pmids)]
-#     print('Get pmid')
-#     pmids = np.array(nonzero_coordinates['pmid'])
-#     print('Build frequencies')
-#     frequencies = np.array([corpus_tfidf[encode_pmid[str(pmid)], feature_id] for pmid in nonzero_coordinates['pmid']])
-#     print(len(nonzero_coordinates))
-#     n_peaks = len(nonzero_coordinates)
-#     print('Build coords')
-#     coord = np.zeros((n_peaks, 3))
-#     coord[:, 0] = nonzero_coordinates['x']
-#     coord[:, 1] = nonzero_coordinates['y']
-#     coord[:, 2] = nonzero_coordinates['z']
-
-#     print('Build voxel coords')
-#     voxel_coords = np.zeros((n_peaks, 3)).astype(int)
-#     for k in range(n_peaks):
-#         voxel_coords[k, :] = np.minimum(np.floor(np.dot(inv_affine, [coord[k, 0], coord[k, 1], coord[k, 2], 1]))[:-1].astype(int), [Ni-1, Nj-1, Nk-1])
-
-#     print('Building map')
-#     for index, value in enumerate(voxel_coords):
-#         i, j, k = value
-#         hist_img_data[i, j, k] += 1
-#         freq_img_data[i, j, k] += frequencies[index]
-    
-
-#     if gray_matter_mask:
-#         freq_img_data = np.ma.masked_array(freq_img_data, np.logical_not(gray_mask.get_data()))
-#         hist_img_data = np.ma.masked_array(hist_img_data, np.logical_not(gray_mask.get_data()))
-
-#     print('Building time : {}'.format(time()-time0))
-#     freq_gauss_img_data = gaussian_filter(freq_img_data, sigma=sigma)
-#     hist_gauss_img_data = gaussian_filter(hist_img_data, sigma=sigma)
-
-#     freq_gauss_img = nib.Nifti1Image(freq_gauss_img_data, affine)
-#     hist_gauss_img = nib.Nifti1Image(hist_gauss_img_data, affine)
-#     hist_img = nib.Nifti1Image(hist_img_data, affine)
-
-#     return freq_gauss_img, hist_gauss_img, hist_img, n_samples
-
-# def average_activity_map_by_keyword(keyword, sigma=1, gray_matter_mask=True):
-#     freq_gauss_img, hist_gauss_img, hist_img, n_samples = build_activity_map_from_keyword(keyword, sigma=sigma, gray_matter_mask=gray_matter_mask)
-
-#     hist_gauss_data = np.array(hist_gauss_img.get_data())
-#     hist_data = np.array(hist_img.get_data())
-
-
-#     avg_gauss_img = nib.Nifti1Image(hist_gauss_data/n_samples, hist_gauss_img.affine)
-#     avg_img = nib.Nifti1Image(hist_data/n_samples, hist_img.affine)
-
-#     print(avg_img.get_data())
-
-#     return avg_gauss_img, avg_img, n_samples
 
 def compute_maps(pmids, Ni, Nj, Nk, inv_affine, normalize, sigma, keyword):
     '''
@@ -221,18 +143,31 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
 
 
 class Maps:
-    def __init__(self, keyword=None, reduce=1, normalize=False, sigma=None):
-        if keyword != None:
-            maps, Ni_r, Nj_r, Nk_r, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=normalize, reduce=reduce, sigma=sigma)
+    def __init__(self, keyword_or_shape=None, reduce=1, normalize=False, sigma=None, Ni=None, Nj=None, Nk=None):
+        if isinstance(keyword_or_shape, str):
+            maps, Ni, Nj, Nk, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=normalize, reduce=reduce, sigma=sigma)
             self.n_voxels, self.n_pmids = maps.shape
-        else:
-            maps, Ni_r, Nj_r, Nk_r, affine_r = None, Ni, Nj, Nk, affine
+        
+        elif isinstance(keyword_or_shape, tuple):
+            if len(keyword_or_shape) != 2:
+                raise ValueError('Given shape of length {} is not admissible (should have length 2).'.format(len(keyword_or_shape)))
+            
+            maps = scipy.sparse.csr_matrix(keyword_or_shape)
+
+        elif isinstance(keyword_or_shape, int):
+            maps = scipy.sparse.csr_matrix((keyword_or_shape, 1))
+
+        elif keyword_or_shape == None:
+            maps, affine_r = None, affine
             self.n_voxels, self.n_pmids = 0, 0
 
+        else:
+            raise ValueError('First argument not understood. Must be str, int or length 2 tuple.')
+
         self._maps = maps
-        self.Ni = Ni_r
-        self.Nj = Nj_r
-        self.Nk = Nk_r
+        self.Ni = Ni
+        self.Nj = Nj
+        self.Nk = Nk
         self.affine = affine_r
 
     def copy_header(self, other):
@@ -242,6 +177,17 @@ class Maps:
         self.Nk = other.Nk
         self.affine = other.affine
 
+    def has_same_header(self, other):
+        if self.n_voxels != other.n_voxels or \
+           self.n_pmids != other.n_pmids or \
+           self.Ni != other.Ni or \
+           self.Nj != other.Nj or \
+           self.Nk != other.Nk or \
+           (self.affine != other.affine).any():
+            return False
+
+        return True
+
     def __str__(self):
         string = '\nMaps object containing {} maps.\n'
         string += '____________Header_____________\n'
@@ -250,7 +196,8 @@ class Maps:
         string += 'N pmids : {}\n'
         string += 'Box size : ({}, {}, {})\n'
         string += 'Affine :\n{}\n'
-        return string.format(self.n_pmids, self.maps.count_nonzero(), self.n_voxels, self.n_pmids, self.Ni, self.Nj, self.Nk, self.affine)
+        string += 'Map : \n{}\n'
+        return string.format(self.n_pmids, self.maps.count_nonzero(), self.n_voxels, self.n_pmids, self.Ni, self.Nj, self.Nk, self.affine, self.maps)
 
     @property
     def maps(self):
@@ -327,6 +274,12 @@ class Maps:
         '''
         e = scipy.sparse.csr_matrix(np.ones(self.n_voxels))
         return np.array(e.dot(self._maps).toarray()[0])
+
+    def max(self):
+        '''
+            Maximum element wise
+        '''
+        return self.maps.max()
 
     def sum(self):
         '''
@@ -435,6 +388,38 @@ class Maps:
 
         return M1 - M2.dot(M2.transpose())
 
+    def iterative_smooth_avg_var(self, sigma=None):
+        '''
+            Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
+            (Less memory usage).
+        '''
+        avg = Maps(self.n_voxels)
+        self.smooth(sigma=sigma, inplace=True)
+        return self.avg(), self.var()
+
+    def __iadd__(self, val):
+        if not self.has_same_header(val):
+            raise ValueError('Maps must have same header to be added. Given :\n{}\n{}'.format(self, val))
+
+        self.maps += val.maps
+
+        return self
+
+    def __add__(self, other):
+        result = copy.copy(self)
+        result += other
+        return result
+
+    def __imul__(self, val):
+        self.maps *= val
+        return self
+
+    def __mul__(self, val):
+        result = copy.copy(self)
+        result *= val
+        return result
+
+
 def metaanalysis_img_from_keyword(keyword, sigma=None, reduce=1, normalize=False):
     maps = Maps(keyword, sigma=sigma, reduce=reduce, normalize=normalize)
     maps = maps.avg()
@@ -451,6 +436,11 @@ if __name__ == '__main__':
     # img = metaanalysis_img_from_keyword(keyword, sigma=sigma)
     # plot_activity_map(img, threshold=0.00065)
 
-    rand_maps = Maps().randomize(100000, 10)
-    print(rand_maps)
+    # rand_maps = Maps().randomize(100000, 10)
+    # print(rand_maps)
+    M1 = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(100000, 10)
+    M2 = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(100000, 10)
+    print(M1)
+    print(M1*2)
 
+    print(M1+M2)
