@@ -143,9 +143,9 @@ def get_all_maps_associated_to_keyword(keyword, reduce=1, gray_matter_mask=None,
 
 
 class Maps:
-    def __init__(self, keyword_or_shape=None, reduce=1, normalize=False, sigma=None, Ni=None, Nj=None, Nk=None):
+    def __init__(self, keyword_or_shape=None, reduce=1, normalize=False, sigma=None, Ni=None, Nj=None, Nk=None, affine=None):
         if isinstance(keyword_or_shape, str):
-            maps, Ni, Nj, Nk, affine_r = get_all_maps_associated_to_keyword(keyword, normalize=normalize, reduce=reduce, sigma=sigma)
+            maps, Ni, Nj, Nk, affine = get_all_maps_associated_to_keyword(keyword, normalize=normalize, reduce=reduce, sigma=sigma)
             self.n_voxels, self.n_pmids = maps.shape
         
         elif isinstance(keyword_or_shape, tuple):
@@ -153,12 +153,14 @@ class Maps:
                 raise ValueError('Given shape of length {} is not admissible (should have length 2).'.format(len(keyword_or_shape)))
             
             maps = scipy.sparse.csr_matrix(keyword_or_shape)
+            self.n_voxels, self.n_pmids = maps.shape
 
         elif isinstance(keyword_or_shape, int):
             maps = scipy.sparse.csr_matrix((keyword_or_shape, 1))
+            self.n_voxels, self.n_pmids = maps.shape
 
         elif keyword_or_shape == None:
-            maps, affine_r = None, affine
+            maps = None
             self.n_voxels, self.n_pmids = 0, 0
 
         else:
@@ -168,14 +170,19 @@ class Maps:
         self.Ni = Ni
         self.Nj = Nj
         self.Nk = Nk
-        self.affine = affine_r
+        self.affine = affine
+
+    @classmethod
+    def zeros(cls, shape, **kwargs):
+        return cls(keyword_or_shape=shape, **kwargs)
 
     def copy_header(self, other):
-        self.n_voxels, self.n_pmids = other.n_voxels, other.n_pmids
         self.Ni = other.Ni
         self.Nj = other.Nj
         self.Nk = other.Nk
         self.affine = other.affine
+
+        return self
 
     def has_same_header(self, other):
         if self.n_voxels != other.n_voxels or \
@@ -309,7 +316,14 @@ class Maps:
         new_maps.maps = self._maps.dot(diag)
         return new_maps
 
-    def smooth(self, sigma, inplace=False):
+    @staticmethod
+    def smooth_map(map, sigma, Ni, Nj, Nk):
+        data = Maps.map_to_data(map, Ni, Nj, Nk)
+        data = gaussian_filter(data, sigma=sigma)
+        map = scipy.sparse.csr_matrix(data.reshape((-1, 1), order='F'))
+        return map
+
+    def smooth(self, sigma, inplace=False, verbose=False):
         '''
             Convolve each map with Gaussian kernel
         '''
@@ -317,6 +331,7 @@ class Maps:
         lil_maps = scipy.sparse.lil_matrix(self.maps)
 
         for k in range(self.n_pmids):
+            if verbose: print('Smoothing {} out of {}.'.format(k, self.n_pmids))
             data = self.to_data(k)
             data = gaussian_filter(data, sigma=sigma)
             lil_maps[:, k] = data.reshape((-1, 1), order='F')
@@ -388,18 +403,43 @@ class Maps:
 
         return M1 - M2.dot(M2.transpose())
 
-    def iterative_smooth_avg_var(self, sigma=None):
+    def iterative_smooth_avg_var(self, sigma=None, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
             (Less memory usage).
         '''
-        avg = Maps(self.n_voxels)
-        self.smooth(sigma=sigma, inplace=True)
-        return self.avg(), self.var()
+        # avg_n = Maps().copy_header(self)
+        # avg_n.maps = self[0]
+        # var_n = Maps(self.n_voxels).copy_header(self)
+
+        avg_map_n = copy.copy(self[0])
+        var_map_n = Maps.zeros(self.n_voxels).maps
+
+        for k in range(2, self.n_pmids+1):
+            if verbose:
+                print('Iterative smooth avg var {} out of {}'.format(k, self.n_pmids))
+            avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
+            current_map = self[k-1]
+
+            if sigma != None:
+                current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
+
+            avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
+            # var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
+            var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
+
+        avg = Maps().copy_header(self)
+        var = Maps().copy_header(self)
+        avg.maps = avg_map_n
+        var.maps = var_map_n
+
+        # self.smooth(sigma=sigma, inplace=True)
+        # return self.avg(), self.var()
+        return avg, var
 
     def __iadd__(self, val):
-        if not self.has_same_header(val):
-            raise ValueError('Maps must have same header to be added. Given :\n{}\n{}'.format(self, val))
+        # if not self.has_same_header(val):
+        #     raise ValueError('Maps must have same header to be added. Given :\n{}\n{}'.format(self, val))
 
         self.maps += val.maps
 
@@ -419,6 +459,9 @@ class Maps:
         result *= val
         return result
 
+    def __getitem__(self, key):
+        return self.maps[:, key]
+
 
 def metaanalysis_img_from_keyword(keyword, sigma=None, reduce=1, normalize=False):
     maps = Maps(keyword, sigma=sigma, reduce=reduce, normalize=normalize)
@@ -436,11 +479,33 @@ if __name__ == '__main__':
     # img = metaanalysis_img_from_keyword(keyword, sigma=sigma)
     # plot_activity_map(img, threshold=0.00065)
 
-    # rand_maps = Maps().randomize(100000, 10)
-    # print(rand_maps)
-    M1 = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(100000, 10)
-    M2 = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(100000, 10)
-    print(M1)
-    print(M1*2)
+    rand_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk, affine=affine).randomize(100000, 10)
+    print(rand_maps)
+    # M1 = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(100000, 10)
+    # M2 = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(100000, 10)
+    # print(M1)
+    # print(M1*2)
 
-    print(M1+M2)
+    # print(M1+M2)
+
+    # rand_maps.smooth(sigma=sigma, verbose=True, inplace=True)
+
+    avg, var = rand_maps.iterative_smooth_avg_var(sigma=sigma, verbose=True)
+
+    print(avg)
+
+    # maps = Maps(keyword)
+    # maps_smoothed = Maps(keyword, sigma=2.)
+    # avg_img = maps_smoothed.avg().to_img()
+    # var_map = maps_smoothed.var()
+    # var_img = var_map.to_img()
+    
+    # avg_map_2, var_map_2 = maps.iterative_smooth_avg_var(sigma=2.)
+    # plot_activity_map(avg_img, threshold=0.00065)
+    # plot_activity_map(avg_map_2.to_img(), threshold=0.00065)    
+    # plot_activity_map(var_img, threshold=0.00003)
+    # plot_activity_map(var_map_2.to_img(), threshold=0.00003)
+
+    # print(var_map)    
+    # print(var_map_2)    
+
