@@ -1,7 +1,3 @@
-import scipy
-import numpy as np
-import nibabel as nib
-
 from globals import mem, Ni, Nj, Nk
 
 def print_percent(index, total, prefix='', rate=10000):
