@@ -1,11 +1,9 @@
 import numpy as np
 
-from globals import Ni, Nj, Nk
-
-import threshold as thr
-import activity_map as am
-import plotting
-from Maps import Maps
+import meta_analysis
+from meta_analysis import threshold as thr
+from meta_analysis import activity_map as am
+from meta_analysis import Ni, Nj, Nk, plotting, Maps
 
 
 if __name__ == '__main__':

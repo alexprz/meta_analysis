@@ -5,7 +5,7 @@ import numpy as np
 import scipy
 import copy
 
-from tools import index_3D_to_1D_checked, index_1D_to_3D_checked
+from meta_analysis.tools import index_3D_to_1D_checked, index_1D_to_3D_checked
 
 @strats.composite
 def random_permitted_case_3D(draw):
@@ -59,6 +59,3 @@ class TestIndexesChange(unittest.TestCase):
         p, Ni, Nj, Nk = args
         i, j, k = index_1D_to_3D_checked(p, Ni, Nj, Nk)
         self.assertEqual(index_3D_to_1D_checked(i, j, k, Ni, Nj, Nk), p)
-
-if __name__ == '__main__':
-    unittest.main()

@@ -5,7 +5,7 @@ import numpy as np
 import scipy
 import copy
 
-from activity_map import Maps
+from meta_analysis import Maps
 
 @strats.composite
 def random_maps(draw):
@@ -98,6 +98,3 @@ class TestIterativeAvgVar(unittest.TestCase):
 
         self.assertTrue(np.allclose(expected_avg.maps.toarray(), avg.maps.toarray()))
         self.assertTrue(np.allclose(expected_var.maps.toarray(), var.maps.toarray()))
-
-if __name__ == '__main__':
-    unittest.main()
