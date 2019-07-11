@@ -122,7 +122,7 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps, Ni, Nj, Nk, affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, affine, reduce=reduce)
+            self._maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, affine, reduce=reduce)
             self.n_voxels, self.n_maps = self._maps.shape
 
         elif isinstance(df_or_shape, tuple):
@@ -138,7 +138,7 @@ class Maps:
             self.n_voxels, self.n_maps = 0, 0
 
         else:
-            raise ValueError('First argument not understood. Must be str, int or length 2 tuple.')
+            raise ValueError('First argument not understood. Must be pandas df, int or length 2 tuple.')
 
 
     @classmethod
