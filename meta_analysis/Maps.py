@@ -181,7 +181,7 @@ class Maps:
 
     @maps.setter
     def maps(self, maps):
-        if maps == None:
+        if maps is None:
             self.n_voxels, self.n_maps = 0, 0
         else:
             self.n_voxels, self.n_maps = maps.shape
@@ -269,7 +269,7 @@ class Maps:
         '''
         sum_map = Maps()
         sum_map.copy_header(self)
-        sum_map.maps = self.sum(axis=1)
+        sum_map.maps = scipy.sparse.csr_matrix(self.sum(axis=1))
 
         return sum_map
 
