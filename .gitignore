@@ -1,6 +1,7 @@
 /venv/
 __pycache__
 line_profiler
-cache_joblib
+cache_*
 .hypothesis
 /plot/*
+save
