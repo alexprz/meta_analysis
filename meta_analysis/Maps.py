@@ -231,45 +231,54 @@ class Maps:
 
 
     @staticmethod
-    def variance(maps):
+    def variance(maps, bias=False):
         '''
             Builds the variance map of the given maps on the second axis.
 
             Returns a sparse CSR matrix of shape (n_voxels, 1) representing the flattened variance map.
         '''
+        _, n_maps = maps.shape
+
         avg_map = Maps.average(maps)
         maps_squared = maps.multiply(maps) # Squared element wise
 
         avg_squared_map = Maps.average(maps_squared)
         squared_avg_map = avg_map.multiply(avg_map)
 
-        return avg_squared_map - squared_avg_map
+        var = avg_squared_map - squared_avg_map
 
-    def var(self):
+        if not bias:
+            var *= (n_maps/(n_maps-1))
+
+        return var
+
+    def var(self, bias=True):
         var_map = Maps()
         var_map.copy_header(self)
-        var_map.maps = self.variance(self._maps)
+        var_map.maps = self.variance(self._maps, bias=bias)
         return var_map
 
-    def cov(self):
+    def cov(self, bias=False):
         '''
             Builds the empirical unbiased covariance matrix of the given maps on the second axis.
 
             Returns a sparse CSR matrix of shape (n_voxels, n_voxels) representing the covariance matrix.
         '''
-        if self.n_maps <= 1:
+        if not bias and self.n_maps <= 1:
             raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self.n_maps))
 
-        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-1)).transpose()
+        ddof = 0 if bias else 1
+
+        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose()
         e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose()
 
         M1 = self._maps.dot(e1)
         M2 = self._maps.dot(e2)
-        M3 = self._maps.dot(self._maps.transpose())/((self.n_maps-1))
+        M3 = self._maps.dot(self._maps.transpose())/((self.n_maps-ddof))
 
         return M3 - M1.dot(M2.transpose())
 
-    def iterative_smooth_avg_var(self, sigma=None, verbose=False):
+    def iterative_smooth_avg_var(self, sigma=None, bias=False, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
             (Less memory usage).
@@ -291,8 +300,11 @@ class Maps:
                 current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
 
             avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
-            # var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
-            var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
+
+            if bias:
+                var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
+            else:
+                var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
 
         avg = Maps().copy_header(self)
         var = Maps().copy_header(self)
