@@ -12,7 +12,7 @@ from .tools import print_percent, index_3D_to_1D, print_percent
 import multiprocessing
 from joblib import Parallel, delayed
 
-def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids):
+def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
         Used for multiprocessing in get_all_maps_associated_to_keyword function.
@@ -26,13 +26,19 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids):
 
     maps = scipy.sparse.lil_matrix((n_pmids, Ni*Nj*Nk))
 
+    groupby_col = col_names['groupby']
+    x_col = col_names['x']
+    y_col = col_names['y']
+    z_col = col_names['z']
+    weight_col = col_names['weight']
+
     i_row, n_tot = 0, df.shape[0]
     for index, row in df.iterrows():
         print_percent(i_row, n_tot)
         i_row += 1
 
-        map_id, weight = index_dict[row['pmid']], row['weight']
-        x, y, z = row['x'], row['y'], row['z']
+        map_id, weight = index_dict[row[groupby_col]], row[weight_col]
+        x, y, z = row[x_col], row[y_col], row[z_col]
         i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
         p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
         maps[map_id, p] += weight
@@ -40,7 +46,7 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids):
     return scipy.sparse.csr_matrix(maps)
 
 @mem.cache
-def build_maps_from_df(df, Ni, Nj, Nk, reduce=1, gray_matter_mask=None):
+def build_maps_from_df(df, col_names, Ni, Nj, Nk, reduce=1, gray_matter_mask=None):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
@@ -77,7 +83,7 @@ def build_maps_from_df(df, Ni, Nj, Nk, reduce=1, gray_matter_mask=None):
     n_jobs = multiprocessing.cpu_count()//2
     splitted_df= np.array_split(df, n_jobs, axis=0)
     
-    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, Ni_r, Nj_r, Nk_r, inv_affine_r, index_dict, n_pmids) for sub_df in splitted_df)
+    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, Ni_r, Nj_r, Nk_r, inv_affine_r, index_dict, n_pmids, col_names) for sub_df in splitted_df)
     
     print('Summing...')
     for m in results:
@@ -86,32 +92,55 @@ def build_maps_from_df(df, Ni, Nj, Nk, reduce=1, gray_matter_mask=None):
     return maps.transpose(), Ni_r, Nj_r, Nk_r, affine_r
 
 class Maps:
-    def __init__(self, df_or_shape=None, reduce=1, normalize=False, sigma=None, Ni=Ni, Nj=Nj, Nk=Nk, affine=None):
+    def __init__(self, df_or_shape=None,
+                       reduce=1,
+                       Ni=None, Nj=None, Nk=None,
+                       affine=None,
+                       groupby_col=None,
+                       x_col='x',
+                       y_col='y',
+                       z_col='z',
+                       weight_col='weight'
+                       ):
+
+        self.Ni = Ni
+        self.Nj = Nj
+        self.Nk = Nk
+        self.affine = affine
 
         if isinstance(df_or_shape, pd.DataFrame):
-            maps, Ni, Nj, Nk, affine = build_maps_from_df(df_or_shape, Ni, Nj, Nk, reduce=reduce)
-            self.n_voxels, self.n_maps = maps.shape
+            if groupby_col == None:
+                raise ValueError('Must specify column name to group by maps.')
+
+            if Ni is None or Nj is None or Nk is None or affine is None:
+                raise ValueError('Must specify box size (Ni, Nj, Nk) and affine when initializing with pandas dataframe.')
+
+            col_names = {
+                'groupby': groupby_col,
+                'x': x_col,
+                'y': y_col,
+                'z': z_col,
+                'weight': weight_col
+            }
+
+            self._maps, Ni, Nj, Nk, affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, reduce=reduce)
+            self.n_voxels, self.n_maps = self._maps.shape
 
         elif isinstance(df_or_shape, tuple):
-            maps = scipy.sparse.csr_matrix(df_or_shape)
-            self.n_voxels, self.n_maps = maps.shape
+            self._maps = scipy.sparse.csr_matrix(df_or_shape)
+            self.n_voxels, self.n_maps = self._maps.shape
 
         elif isinstance(df_or_shape, int):
-            maps = scipy.sparse.csr_matrix((df_or_shape, 1))
-            self.n_voxels, self.n_maps = maps.shape
+            self._maps = scipy.sparse.csr_matrix((df_or_shape, 1))
+            self.n_voxels, self.n_maps = self._maps.shape
 
-        elif df_or_shape == None:
-            maps = None
+        elif df_or_shape is None:
+            self._maps = None
             self.n_voxels, self.n_maps = 0, 0
 
         else:
             raise ValueError('First argument not understood. Must be str, int or length 2 tuple.')
 
-        self._maps = maps
-        self.Ni = Ni
-        self.Nj = Nj
-        self.Nk = Nk
-        self.affine = affine
 
     @classmethod
     def zeros(cls, shape, **kwargs):

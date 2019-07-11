@@ -4,7 +4,7 @@ import pandas as pd
 import meta_analysis
 from meta_analysis import threshold as thr
 from meta_analysis import activity_map as am
-from meta_analysis import Ni, Nj, Nk, plotting, Maps
+from meta_analysis import Ni, Nj, Nk, affine, plotting, Maps
 
 from meta_analysis import coordinates, corpus_tfidf, decode_pmid, encode_feature
 
@@ -22,14 +22,14 @@ if __name__ == '__main__':
     # plotting.plot_activity_map(stat_img, glass_brain=True, threshold=0.)
 
     # Step 2
-    keyword = 'prosopagnosia'
-    # keyword = 'memory'
+    # keyword = 'prosopagnosia'
+    keyword = 'memory'
     # keyword = 'language'
     # keyword = 'schizophrenia'
     sigma = 2.
     df = build_df_from_keyword(keyword)
     
-    maps_HD = Maps(df, sigma=None, reduce=1, normalize=False)
+    maps_HD = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid')
     
 
     avg, var = maps_HD.iterative_smooth_avg_var(sigma=sigma, verbose=True)
