@@ -5,14 +5,14 @@ import pandas as pd
 from scipy.ndimage import gaussian_filter
 
 from .activity_map import get_all_maps_associated_to_keyword
-from .globals import Ni, Nj, Nk, affine, inv_affine
+from .globals import Ni, Nj, Nk, affine, inv_affine, mem
 
 from .tools import print_percent, index_3D_to_1D, print_percent
 
 import multiprocessing
 from joblib import Parallel, delayed
 
-def compute_maps(df, Ni, Nj, Nk, inv_affine, n_pmids):
+def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
         Used for multiprocessing in get_all_maps_associated_to_keyword function.
@@ -31,7 +31,7 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, n_pmids):
         print_percent(i_row, n_tot)
         i_row += 1
 
-        map_id, weight = row['map_id'], row['weight']
+        map_id, weight = index_dict[row['pmid']], row['weight']
         x, y, z = row['x'], row['y'], row['z']
         i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
         p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
@@ -56,19 +56,10 @@ def build_maps_from_df(df, Ni, Nj, Nk, reduce=1, gray_matter_mask=None):
             affine_r: new affine (changed if reduce != 1)
     '''
 
-    # Add an extra column maps_id to the df
+    # Creating map index
     unique_pmid = df['pmid'].unique()
     n_pmids = len(unique_pmid)
     index_dict = {k:v for v, k in enumerate(unique_pmid)}
-    df_gb = df.groupby(['pmid'])
-
-    def my_print(data):
-        pmid = data.iloc[0]['pmid']
-        data['map_id'] = index_dict[pmid]
-        return data
-
-    print('Building map index...')
-    df = df_gb.apply(my_print)
 
     # Computing new box size according to the reducing factor
     Ni_r, Nj_r, Nk_r = np.ceil(np.array((Ni, Nj, Nk))/reduce).astype(int)
@@ -86,7 +77,7 @@ def build_maps_from_df(df, Ni, Nj, Nk, reduce=1, gray_matter_mask=None):
     n_jobs = multiprocessing.cpu_count()//2
     splitted_df= np.array_split(df, n_jobs, axis=0)
     
-    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, Ni_r, Nj_r, Nk_r, inv_affine_r, n_pmids) for sub_df in splitted_df)
+    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, Ni_r, Nj_r, Nk_r, inv_affine_r, index_dict, n_pmids) for sub_df in splitted_df)
     
     print('Summing...')
     for m in results:
