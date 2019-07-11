@@ -1,3 +1,4 @@
+import numpy as np
 from matplotlib import pyplot as plt
 import seaborn as sns
 from nilearn import plotting
@@ -40,5 +41,5 @@ def plot_cov_matrix_brain(M, Ni, Nj, Nk, affine, threshold=None):
     for k in range(coords.shape[0]):
         coords_world[k, :] = np.dot(affine, [coords[k, 0], coords[k, 1], coords[k, 2], 1])[:-1]
 
-    plotting.plot_connectome(M, coords_world, node_size=5, node_color='black', edge_threshold=threshold)
+    plotting.plot_connectome(M, coords_world, node_size=5, node_color='black', edge_threshold=threshold*np.max(M))
     plt.show()
