@@ -187,8 +187,32 @@ class Maps:
             self.n_voxels, self.n_maps = maps.shape
         self._maps = maps
 
-    def randomize(self, n_peaks, n_maps, inplace=False):
-        maps = scipy.sparse.csr_matrix(np.random.binomial(n=n_peaks, p=1./(self.Ni*self.Nj*self.Nk*n_maps), size=(self.Ni*self.Nj*self.Nk, n_maps)).astype(float))
+    def randomize(self, n_peaks, n_maps, inplace=False, p=None):
+        if self.Ni is None or self.Nj is None or self.Nk is None:
+            raise ValueError('Invalid box size ({}, {}, {}).'.format(Ni, Nj, Nk))
+
+        n_voxels = self.Ni*self.Nj*self.Nk
+        
+        if p is None: # Uniform distribution across voxels
+            maps = scipy.sparse.csr_matrix(np.random.binomial(n=n_peaks, p=1./(n_voxels*n_maps), size=(n_voxels, n_maps)).astype(float))
+        
+        else: # Given distribution across voxels
+            
+            if isinstance(p, Maps) and p.n_maps != 1:
+                raise ValueError('Maps object should contain exactly one map to serve as distribution. Given has {} maps.'.format(p.n_maps))
+            
+            elif isinstance(p, Maps):
+                p = p.maps.transpose().toarray()[0]
+
+            maps = scipy.sparse.lil_matrix((n_voxels, n_maps))
+            voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)
+
+            for voxel_id in voxels_samples:
+                map_id = np.random.randint(n_maps)
+                maps[voxel_id, map_id] += 1
+
+            maps = scipy.sparse.csr_matrix(maps)
+
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = maps
@@ -446,3 +470,4 @@ class Maps:
 
     def __getitem__(self, key):
         return self.maps[:, key]
+
