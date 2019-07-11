@@ -2,3 +2,5 @@
 __pycache__
 line_profiler
 cache_joblib
+.hypothesis
+/plot/*
