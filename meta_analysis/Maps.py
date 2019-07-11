@@ -1,28 +1,115 @@
 import scipy, copy
 import numpy as np
 import nibabel as nib
+import pandas as pd
 from scipy.ndimage import gaussian_filter
 
 from .activity_map import get_all_maps_associated_to_keyword
+from .globals import Ni, Nj, Nk, affine, inv_affine
+
+from .tools import print_percent, index_3D_to_1D, print_percent
+
+import multiprocessing
+from joblib import Parallel, delayed
+
+def compute_maps(df, Ni, Nj, Nk, inv_affine, n_pmids):
+    '''
+        Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
+        Used for multiprocessing in get_all_maps_associated_to_keyword function.
+
+        pmids : list of pmid
+        Ni, Nj, Nk : size of the 3D box (used to flatten 3D to 1D indices)
+        inv_affine : the affine inverse used to compute voxels coordinates
+
+        Returns sparse LIL matrix of shape (len(pmids), Ni*Nj*Nk) containing all the maps
+    '''
+
+    maps = scipy.sparse.lil_matrix((n_pmids, Ni*Nj*Nk))
+
+    i_row, n_tot = 0, df.shape[0]
+    for index, row in df.iterrows():
+        print_percent(i_row, n_tot)
+        i_row += 1
+
+        map_id, weight = row['map_id'], row['weight']
+        x, y, z = row['x'], row['y'], row['z']
+        i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
+        p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
+        maps[map_id, p] += weight
+
+    return scipy.sparse.csr_matrix(maps)
+
+@mem.cache
+def build_maps_from_df(df, Ni, Nj, Nk, reduce=1, gray_matter_mask=None):
+    '''
+        Given a keyword, finds every related studies and builds their activation maps.
+
+        gray_matter_mask : if True, only voxels inside gray_matter_mask are taken into account (NOT IMPLEMENTED YET)
+        reduce : integer, reducing scale factor. Ex : if reduce=2, aggregates voxels every 2 voxels in each direction.
+                Notice that this affects the affine and box size.
+
+        Returns 
+            maps: sparse CSR matrix of shape (n_voxels, n_pmids) containing all the related flattenned maps where
+                    n_pmids is the number of pmids related to the keyword
+                    n_voxels is the number of voxels in the box (may have changed if reduce != 1)
+            Ni_r, Nj_r, Nk_r: new box dimension (changed if reduce != 1)
+            affine_r: new affine (changed if reduce != 1)
+    '''
+
+    # Add an extra column maps_id to the df
+    unique_pmid = df['pmid'].unique()
+    n_pmids = len(unique_pmid)
+    index_dict = {k:v for v, k in enumerate(unique_pmid)}
+    df_gb = df.groupby(['pmid'])
+
+    def my_print(data):
+        pmid = data.iloc[0]['pmid']
+        data['map_id'] = index_dict[pmid]
+        return data
+
+    print('Building map index...')
+    df = df_gb.apply(my_print)
+
+    # Computing new box size according to the reducing factor
+    Ni_r, Nj_r, Nk_r = np.ceil(np.array((Ni, Nj, Nk))/reduce).astype(int)
+
+    # LIL format allows faster incremental construction of sparse matrix
+    maps = scipy.sparse.csr_matrix((n_pmids, Ni_r*Nj_r*Nk_r))
+
+    # Changing affine to the new box size
+    affine_r = np.copy(affine)
+    for i in range(3):
+        affine_r[i, i] = affine[i, i]*reduce
+    inv_affine_r = np.linalg.inv(affine_r)
+
+    # Multiprocessing maps computation
+    n_jobs = multiprocessing.cpu_count()//2
+    splitted_df= np.array_split(df, n_jobs, axis=0)
+    
+    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, Ni_r, Nj_r, Nk_r, inv_affine_r, n_pmids) for sub_df in splitted_df)
+    
+    print('Summing...')
+    for m in results:
+        maps += m
+    
+    return maps.transpose(), Ni_r, Nj_r, Nk_r, affine_r
 
 class Maps:
-    def __init__(self, keyword_or_shape=None, reduce=1, normalize=False, sigma=None, Ni=None, Nj=None, Nk=None, affine=None):
-        if isinstance(keyword_or_shape, str):
-            maps, Ni, Nj, Nk, affine = get_all_maps_associated_to_keyword(keyword_or_shape, normalize=normalize, reduce=reduce, sigma=sigma)
-            self.n_voxels, self.n_maps = maps.shape
-        
-        elif isinstance(keyword_or_shape, tuple):
-            if len(keyword_or_shape) != 2:
-                raise ValueError('Given shape of length {} is not admissible (should have length 2).'.format(len(keyword_or_shape)))
-            
-            maps = scipy.sparse.csr_matrix(keyword_or_shape)
+    def __init__(self, df_or_shape=None, reduce=1, normalize=False, sigma=None, Ni=Ni, Nj=Nj, Nk=Nk, affine=None):
+
+        if isinstance(df_or_shape, pd.DataFrame):
+            maps, Ni, Nj, Nk, affine = build_maps_from_df(df_or_shape, Ni, Nj, Nk, reduce=reduce)
             self.n_voxels, self.n_maps = maps.shape
 
-        elif isinstance(keyword_or_shape, int):
-            maps = scipy.sparse.csr_matrix((keyword_or_shape, 1))
+        elif isinstance(df_or_shape, tuple):
+            maps = scipy.sparse.csr_matrix(df_or_shape)
             self.n_voxels, self.n_maps = maps.shape
 
-        elif keyword_or_shape == None:
+        elif isinstance(df_or_shape, int):
+            maps = scipy.sparse.csr_matrix((df_or_shape, 1))
+            self.n_voxels, self.n_maps = maps.shape
+
+        elif df_or_shape == None:
             maps = None
             self.n_voxels, self.n_maps = 0, 0
 
@@ -37,7 +124,7 @@ class Maps:
 
     @classmethod
     def zeros(cls, shape, **kwargs):
-        return cls(keyword_or_shape=shape, **kwargs)
+        return cls(df_or_shape=shape, **kwargs)
 
     def copy_header(self, other):
         self.Ni = other.Ni
