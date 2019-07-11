@@ -253,28 +253,27 @@ class Maps:
 
     def cov(self):
         '''
-            Builds the empirical covariance matrix of the given maps on the second axis.
+            Builds the empirical unbiased covariance matrix of the given maps on the second axis.
 
             Returns a sparse CSR matrix of shape (n_voxels, n_voxels) representing the covariance matrix.
         '''
+        if self.n_maps <= 1:
+            raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self.n_maps))
 
-        # _, n_maps = maps.shape 
+        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-1)).transpose()
+        e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose()
 
-        e = scipy.sparse.csr_matrix(np.ones(self.n_maps)/self.n_maps).transpose()
+        M1 = self._maps.dot(e1)
+        M2 = self._maps.dot(e2)
+        M3 = self._maps.dot(self._maps.transpose())/((self.n_maps-1))
 
-        M1 = self._maps.dot(self._maps.transpose())/self.n_maps
-        M2 = self._maps.dot(e)
-
-        return M1 - M2.dot(M2.transpose())
+        return M3 - M1.dot(M2.transpose())
 
     def iterative_smooth_avg_var(self, sigma=None, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
             (Less memory usage).
         '''
-        # avg_n = Maps().copy_header(self)
-        # avg_n.maps = self[0]
-        # var_n = Maps(self.n_voxels).copy_header(self)
 
         current_map = self[0]
         if sigma != None:
