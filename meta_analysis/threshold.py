@@ -3,7 +3,7 @@ from joblib import Parallel, delayed
 from time import time
 import numpy as np
 
-from .globals import mem, Ni, Nj, Nk
+from .globals import mem
 from .tools import print_percent
 from .Maps import Maps
 
@@ -26,7 +26,7 @@ def avg_var_threshold_MC_pool(N_sim, kwargs):
     return avgs, vars
 
 @mem.cache
-def avg_var_threshold_MC(n_peaks, n_maps, Ni=Ni, Nj=Nj, Nk=Nk, N_simulations=5000, sigma=1., verbose=False):
+def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=1., verbose=False):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''

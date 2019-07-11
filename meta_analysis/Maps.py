@@ -4,10 +4,9 @@ import nibabel as nib
 import pandas as pd
 from scipy.ndimage import gaussian_filter
 
-from .activity_map import get_all_maps_associated_to_keyword
-from .globals import Ni, Nj, Nk, affine, inv_affine, mem
+from .globals import mem
 
-from .tools import print_percent, index_3D_to_1D, print_percent
+from .tools import print_percent, index_3D_to_1D
 
 import multiprocessing
 from joblib import Parallel, delayed
@@ -46,7 +45,7 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
     return scipy.sparse.csr_matrix(maps)
 
 @mem.cache
-def build_maps_from_df(df, col_names, Ni, Nj, Nk, reduce=1, gray_matter_mask=None):
+def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, gray_matter_mask=None):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
@@ -123,7 +122,7 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps, Ni, Nj, Nk, affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, reduce=reduce)
+            self._maps, Ni, Nj, Nk, affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, affine, reduce=reduce)
             self.n_voxels, self.n_maps = self._maps.shape
 
         elif isinstance(df_or_shape, tuple):

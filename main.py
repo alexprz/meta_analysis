@@ -3,27 +3,21 @@ import pandas as pd
 
 import meta_analysis
 from meta_analysis import threshold as thr
-from meta_analysis import activity_map as am
-from meta_analysis import Ni, Nj, Nk, affine, plotting, Maps
+from meta_analysis import plotting, Maps
 
-from meta_analysis import coordinates, corpus_tfidf, decode_pmid, encode_feature
-
-def build_df_from_keyword(keyword):
-    nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, encode_feature[keyword]].nonzero()[0]])
-    df = coordinates[coordinates['pmid'].isin(nonzero_pmids)]
-    df['weight'] = 1
-    return df
+from globals import coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine
+from tools import build_activity_map_from_pmid, build_df_from_keyword
 
 if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
     # pmid = 22266924 
     pmid = 16723214 
-    stat_img = am.build_activity_map_from_pmid(pmid, sigma=1.5)
+    stat_img = build_activity_map_from_pmid(pmid, sigma=1.5)
     # plotting.plot_activity_map(stat_img, glass_brain=True, threshold=0.)
 
     # Step 2
-    # keyword = 'prosopagnosia'
-    keyword = 'memory'
+    keyword = 'prosopagnosia'
+    # keyword = 'memory'
     # keyword = 'language'
     # keyword = 'schizophrenia'
     sigma = 2.
