@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import scipy
 
+pickle_path = 'save/'
 input_path = 'minimal/'
 cache_dir = 'cache_joblib'
 mem = Memory(cache_dir)

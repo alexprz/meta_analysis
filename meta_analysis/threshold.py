@@ -8,8 +8,8 @@ from .tools import print_percent
 from .Maps import Maps
 
 
-def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose):
-    random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps)
+def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p):
+    random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps, p=p)
     avg_map, var_map = random_maps.iterative_smooth_avg_var(sigma, verbose=verbose)
     return avg_map.max(), var_map.max()
 
@@ -19,14 +19,14 @@ def avg_var_threshold_MC_pool(N_sim, kwargs):
         (Used for multiprocessing with joblib)
     '''
     avgs, vars = np.zeros(N_sim), np.zeros(N_sim)
-    n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose = kwargs['n_peaks'], kwargs['n_maps'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma'], kwargs['verbose']
+    # n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose = kwargs['n_peaks'], kwargs['n_maps'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma'], kwargs['verbose']
     for k in range(N_sim):
-        avgs[k], vars[k] = simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose)
-        print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(n_peaks))
+        avgs[k], vars[k] = simulate_maps(**kwargs)
+        print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(kwargs['n_peaks']))
     return avgs, vars
 
 @mem.cache
-def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=1., verbose=False):
+def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=1., verbose=False, p=None):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''
@@ -40,7 +40,8 @@ def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=
         'sigma': sigma,
         'n_peaks': n_peaks,
         'n_maps': n_maps,
-        'verbose': verbose
+        'verbose': verbose,
+        'p': p
     }
 
     n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
@@ -48,8 +49,8 @@ def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=
     result = np.concatenate(Parallel(n_jobs=nb_processes, backend='multiprocessing')(delayed(avg_var_threshold_MC_pool)(n, kwargs) for n in n_list), axis=1)
     avgs, vars = result[0], result[1]
 
-    avg_threshold = np.percentile(avgs, .99)
-    var_threshold = np.percentile(vars, .99)
+    avg_threshold = np.percentile(avgs, .95)
+    var_threshold = np.percentile(vars, .95)
 
     print('Time for MC threshold estimation : {}'.format(time()-time0))
     print('Estimated avg threshold : {}'.format(avg_threshold))
