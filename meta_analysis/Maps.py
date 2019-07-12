@@ -46,11 +46,10 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
     return scipy.sparse.csr_matrix(maps)
 
 @mem.cache
-def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, gray_matter_mask=None):
+def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
-        gray_matter_mask : if True, only voxels inside gray_matter_mask are taken into account (NOT IMPLEMENTED YET)
         reduce : integer, reducing scale factor. Ex : if reduce=2, aggregates voxels every 2 voxels in each direction.
                 Notice that this affects the affine and box size.
 
@@ -88,14 +87,27 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, gray_matter_
     print('Summing...')
     for m in results:
         maps += m
+
+    maps = maps.transpose()
+
+    if not mask is None:
+        if mask.shape != (Ni, Nj, Nk):
+            raise ValueError('Shape missmatch between given mask {} and box size ({}, {}, {})'.format(mask.shape, Ni, Nj, Nk))
+
+        print('Masking...')
+        diag_mask = scipy.sparse.diags(mask.reshape(-1, order='F'))
+        print(diag_mask)
+        print(diag_mask.shape)
+        maps = diag_mask.dot(maps)
     
-    return maps.transpose(), Ni_r, Nj_r, Nk_r, affine_r
+    return maps, Ni_r, Nj_r, Nk_r, affine_r
 
 class Maps:
     def __init__(self, df_or_shape=None,
                        reduce=1,
                        Ni=None, Nj=None, Nk=None,
                        affine=None,
+                       mask=None,
                        groupby_col=None,
                        x_col='x',
                        y_col='y',
@@ -123,7 +135,7 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, affine, reduce=reduce)
+            self._maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, affine, mask=mask, reduce=reduce)
             self.n_voxels, self.n_maps = self._maps.shape
 
         elif isinstance(df_or_shape, tuple):
