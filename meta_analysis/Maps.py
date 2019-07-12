@@ -3,6 +3,7 @@ import numpy as np
 import nibabel as nib
 import pandas as pd
 from scipy.ndimage import gaussian_filter
+from sklearn.covariance import LedoitWolf
 
 from .globals import mem
 
@@ -388,7 +389,7 @@ class Maps:
         var_map.maps = self.variance(self._maps, bias=bias)
         return var_map
 
-    def cov(self, bias=False):
+    def cov(self, bias=False, shrink=None):
         '''
             Builds the empirical unbiased covariance matrix of the given maps on the second axis.
 
@@ -406,7 +407,14 @@ class Maps:
         M2 = self._maps.dot(e2)
         M3 = self._maps.dot(self._maps.transpose())/((self.n_maps-ddof))
 
-        return M3 - M1.dot(M2.transpose())
+        # Empirical covariance matrix
+        S =  M3 - M1.dot(M2.transpose())
+
+        if shrink is None:
+            return S
+
+        elif shrink == 'LW':
+            return LedoitWolf().fit(S.toarray()).covariance_
 
     def iterative_smooth_avg_var(self, sigma=None, bias=False, verbose=False):
         '''
