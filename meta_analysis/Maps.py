@@ -12,7 +12,7 @@ from .tools import print_percent, index_3D_to_1D
 import multiprocessing
 from joblib import Parallel, delayed
 
-def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
+def compute_maps(df, **kwargs):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
         Used for multiprocessing in get_all_maps_associated_to_keyword function.
@@ -23,14 +23,27 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
 
         Returns sparse LIL matrix of shape (len(pmids), Ni*Nj*Nk) containing all the maps
     '''
-
-    maps = scipy.sparse.lil_matrix((n_pmids, Ni*Nj*Nk))
+    Ni = kwargs['Ni']
+    Nj = kwargs['Nj']
+    Nk = kwargs['Nk']
+    Ni_r = kwargs['Ni_r']
+    Nj_r = kwargs['Nj_r']
+    Nk_r = kwargs['Nk_r']
+    inv_affine = kwargs['inv_affine']
+    inv_affine_r = kwargs['inv_affine_r']
+    index_dict = kwargs['index_dict']
+    n_pmids = kwargs['n_pmids']
+    col_names = kwargs['col_names']
+    mask = kwargs['mask']
 
     groupby_col = col_names['groupby']
     x_col = col_names['x']
     y_col = col_names['y']
     z_col = col_names['z']
     weight_col = col_names['weight']
+
+    maps = scipy.sparse.lil_matrix((n_pmids, Ni_r*Nj_r*Nk_r))
+
 
     i_row, n_tot = 0, df.shape[0]
     for index, row in df.iterrows():
@@ -39,9 +52,12 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
 
         map_id, weight = index_dict[row[groupby_col]], row[weight_col]
         x, y, z = row[x_col], row[y_col], row[z_col]
+        i_r, j_r, k_r = np.clip(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni_r-1, Nj_r-1, Nk_r-1])
         i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
-        p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
-        maps[map_id, p] += weight
+        
+        if mask is None or mask[i, j, k] == 1:
+            p = index_3D_to_1D(i_r, j_r, k_r, Ni_r, Nj_r, Nk_r)
+            maps[map_id, p] += weight
 
     return scipy.sparse.csr_matrix(maps)
 
@@ -77,28 +93,34 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
     for i in range(3):
         affine_r[i, i] = affine[i, i]*reduce
     inv_affine_r = np.linalg.inv(affine_r)
+    inv_affine = np.linalg.inv(affine)
 
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()//2
     splitted_df= np.array_split(df, n_jobs, axis=0)
+
+    kwargs = {
+        'Ni_r': Ni_r,
+        'Nj_r': Nj_r,
+        'Nk_r': Ni_r,
+        'Ni': Ni,
+        'Nj': Nj,
+        'Nk': Nk,
+        'inv_affine_r': inv_affine_r,
+        'inv_affine': inv_affine,
+        'index_dict': index_dict,
+        'n_pmids': n_pmids,
+        'col_names': col_names,
+        'mask': mask
+    }
     
-    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, Ni_r, Nj_r, Nk_r, inv_affine_r, index_dict, n_pmids, col_names) for sub_df in splitted_df)
+    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
     
     print('Summing...')
     for m in results:
         maps += m
 
     maps = maps.transpose()
-
-    if not mask is None:
-        if mask.shape != (Ni, Nj, Nk):
-            raise ValueError('Shape missmatch between given mask {} and box size ({}, {}, {})'.format(mask.shape, Ni, Nj, Nk))
-
-        print('Masking...')
-        diag_mask = scipy.sparse.diags(mask.reshape(-1, order='F'))
-        print(diag_mask)
-        print(diag_mask.shape)
-        maps = diag_mask.dot(maps)
     
     return maps, Ni_r, Nj_r, Nk_r, affine_r
 

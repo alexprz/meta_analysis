@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import copy
 import pickle
+import scipy
 
 import os
 here = os.path.dirname(os.path.abspath(__file__))
@@ -10,7 +11,7 @@ import meta_analysis
 from meta_analysis import threshold as thr
 from meta_analysis import plotting, Maps
 
-from globals import coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine, pickle_path
+from globals import coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine, pickle_path, gray_mask
 from tools import build_activity_map_from_pmid, build_df_from_keyword
 
 if __name__ == '__main__':
@@ -25,11 +26,11 @@ if __name__ == '__main__':
     # keyword = 'language'
     # keyword = 'schizophrenia'
     sigma = 2.
-    N_sim = 20
+    N_sim = 5
 
     df = build_df_from_keyword(keyword)
     
-    maps_HD = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid')
+    maps_HD = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid', mask=gray_mask.get_data())
     
 
     avg, var = maps_HD.iterative_smooth_avg_var(sigma=sigma, verbose=True)
@@ -51,45 +52,53 @@ if __name__ == '__main__':
     # maps_LD.smooth(sigma=sigma, verbose=True)
     # cov_matrix = maps_LD.cov()
     # print(cov_matrix)
+    # print(np.max(cov_matrix))
+    # print(scipy.stats.describe(cov_matrix, axis=None))
     # plotting.plot_cov_matrix_brain(cov_matrix, maps_LD.Ni, maps_LD.Nj, maps_LD.Nk, maps_LD.affine, threshold=0.2)
 
-    with open("{}all_maps_avg_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
-        loaded_avg = pickle.load(file)
+    # with open("{}all_maps_avg_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
+    #     loaded_avg = pickle.load(file)
 
-    p = loaded_avg.normalize(inplace=True)
+    # p = loaded_avg.normalize(inplace=True)
 
-    avg_threshold_p, var_threshold_p = thr.avg_var_threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, N_simulations=N_sim, sigma=sigma, verbose=True, p=p)
+    # avg_threshold_p, var_threshold_p = thr.avg_var_threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, N_simulations=N_sim, sigma=sigma, verbose=True, p=p)
 
-    plotting.plot_activity_map(avg_img, glass_brain=False, threshold=avg_threshold)
-    plotting.plot_activity_map(var_img, glass_brain=False, threshold=var_threshold)
+    # plotting.plot_activity_map(avg_img, glass_brain=False, threshold=avg_threshold)
+    # plotting.plot_activity_map(var_img, glass_brain=False, threshold=var_threshold)
 
     # df = copy.copy(coordinates)
     # df['weight'] = 1
 
 
-    # all_maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid')
+    # all_maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=20, groupby_col='pmid', mask=gray_mask.get_data())
+
+    # print(gray_mask.get_data()[gray_mask.get_data() > 0])
+
+    # print(all_maps)
 
     # all_maps.smooth(sigma=sigma, verbose=True, inplace=True)
 
     # avg, var = all_maps.iterative_smooth_avg_var(sigma=sigma, verbose=True)
 
-    # with open("{}all_maps_avg_sigma_{}.pickle".format(pickle_path, sigma), 'wb') as file:
+    # with open("{}all_maps_gray_mask_avg_sigma_{}.pickle".format(pickle_path, sigma), 'wb') as file:
     #     pickle.dump(avg, file)
 
-    # with open("{}all_maps_var_sigma_{}.pickle".format(pickle_path, sigma), 'wb') as file:
+    # with open("{}all_maps_gray_mask_var_sigma_{}.pickle".format(pickle_path, sigma), 'wb') as file:
     #     pickle.dump(var, file)
 
     # with open("{}all_maps_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
     #     loaded_maps = pickle.load(file)
 
-    # with open("{}all_maps_avg_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
+    # with open("{}all_maps_gray_mask_avg_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
     #     loaded_avg = pickle.load(file)
-    # with open("{}all_maps_var_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
+    # with open("{}all_maps_gray_mask_avg_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
     #     loaded_var = pickle.load(file)
 
     # plotting.plot_activity_map(loaded_maps.avg().to_img(), threshold=0.0007)
     # plotting.plot_activity_map(loaded_avg.to_img(), threshold=0.0002)
     # plotting.plot_activity_map(loaded_var.to_img(), threshold=0.00007)
+
+    # print(loaded_avg)
 
     # p = loaded_avg.normalize(inplace=True)
 
