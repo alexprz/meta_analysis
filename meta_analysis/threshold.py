@@ -8,25 +8,32 @@ from .tools import print_percent
 from .Maps import Maps
 
 
-def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p, mask):
-    random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps, p=p)
-    avg_map, var_map = random_maps.iterative_smooth_avg_var(sigma, verbose=verbose)
-    return avg_map.max(), var_map.max()
+def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p, mask, var, cov):
 
-def avg_var_threshold_MC_pool(N_sim, kwargs):
+    if (var, cov) == (False, False):
+        random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, 1, p=p)
+        return random_maps.avg().max(), None, None
+
+    else:
+        random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps, p=p)
+        avg_map, var_map = random_maps.iterative_smooth_avg_var(sigma, verbose=verbose)
+        return avg_map.max(), var_map.max(), None
+
+def threshold_MC_pool(N_sim, kwargs):
     '''
-        Equivalent to avg_var_threshold_MC function called N_sim times.
+        Equivalent to threshold_MC function called N_sim times.
         (Used for multiprocessing with joblib)
     '''
-    avgs, vars = np.zeros(N_sim), np.zeros(N_sim)
-    # n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose = kwargs['n_peaks'], kwargs['n_maps'], kwargs['Ni'], kwargs['Nj'], kwargs['Nk'], kwargs['sigma'], kwargs['verbose']
+    avgs, vars, covs = np.zeros(N_sim), np.zeros(N_sim), np.zeros(N_sim)
+    
     for k in range(N_sim):
-        avgs[k], vars[k] = simulate_maps(**kwargs)
+        avgs[k], vars[k], covs[k] = simulate_maps(**kwargs)
         print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(kwargs['n_peaks']))
-    return avgs, vars
+    
+    return avgs, vars, covs
 
 @mem.cache
-def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=1., verbose=False, p=None, mask=None):
+def threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, stats=['avg', 'var'], N_simulations=5000, sigma=1., verbose=False, p=None, mask=None):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''
@@ -42,21 +49,28 @@ def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=
         'n_maps': n_maps,
         'verbose': verbose,
         'p': p,
-        'mask': mask
+        'mask': mask,
+        'var': True if 'var' in stats else False,
+        'cov': True if 'cov' in stats else False,
     }
 
     n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
 
-    result = np.concatenate(Parallel(n_jobs=nb_processes, backend='multiprocessing')(delayed(avg_var_threshold_MC_pool)(n, kwargs) for n in n_list), axis=1)
-    avgs, vars = result[0], result[1]
+    result = np.concatenate(Parallel(n_jobs=nb_processes, backend='multiprocessing')(delayed(threshold_MC_pool)(n, kwargs) for n in n_list), axis=1)
+    avgs, vars, covs = result[0], result[1], result[2]
 
-    avg_threshold = np.percentile(avgs, .95)
-    var_threshold = np.percentile(vars, .95)
+    res = dict()
+    if 'avg' in stats:
+        res['avg'] = np.percentile(avgs, .95)
+    if 'var' in stats:
+        res['var'] = np.percentile(vars, .95)
+    if 'cov' in stats:
+        res['cov'] = np.percentile(covs, .95)
 
     print('Time for MC threshold estimation : {}'.format(time()-time0))
-    print('Estimated avg threshold : {}'.format(avg_threshold))
-    print('Estimated var threshold : {}'.format(var_threshold))
-    return avg_threshold, var_threshold
+    print('Estimated thresholds : {}'.format(res))
+
+    return res
 
 if __name__ == '__main__':
     n_peaks = 2798

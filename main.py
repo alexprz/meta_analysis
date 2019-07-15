@@ -27,10 +27,11 @@ if __name__ == '__main__':
     # keyword = 'schizophrenia'
     sigma = 2.
     N_sim = 5
+    gray_mask_data = gray_mask.get_data()
 
     df = build_df_from_keyword(keyword)
     
-    maps_HD = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid', mask=gray_mask.get_data())
+    maps_HD = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid', mask=gray_mask_data)
     
 
     avg, var = maps_HD.iterative_smooth_avg_var(sigma=sigma, verbose=True)
@@ -42,7 +43,9 @@ if __name__ == '__main__':
     print('Nb peaks : {}'.format(n_peaks))
     print('Nb maps : {}'.format(n_maps))
 
-    avg_threshold, var_threshold = thr.avg_var_threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, N_simulations=N_sim, sigma=sigma, verbose=True)
+    thresholds = thr.threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, N_simulations=N_sim, sigma=sigma, verbose=True, mask=gray_mask_data)
+
+    avg_threshold, var_threshold = thresholds['avg'], thresholds['var']
 
     plotting.plot_activity_map(avg_img, glass_brain=False, threshold=avg_threshold)
     plotting.plot_activity_map(var_img, glass_brain=False, threshold=var_threshold)
@@ -56,15 +59,17 @@ if __name__ == '__main__':
     # print(scipy.stats.describe(cov_matrix, axis=None))
     # plotting.plot_cov_matrix_brain(cov_matrix, maps_LD.Ni, maps_LD.Nj, maps_LD.Nk, maps_LD.affine, threshold=0.2)
 
-    # with open("{}all_maps_avg_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
-    #     loaded_avg = pickle.load(file)
+    with open("{}all_maps_avg_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
+        loaded_avg = pickle.load(file)
 
-    # p = loaded_avg.normalize(inplace=True)
+    p = loaded_avg.normalize(inplace=True)
 
-    # avg_threshold_p, var_threshold_p = thr.avg_var_threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, N_simulations=N_sim, sigma=sigma, verbose=True, p=p)
+    thresholds_p = thr.threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, N_simulations=N_sim, sigma=sigma, verbose=True, p=p, mask=gray_mask_data)
 
-    # plotting.plot_activity_map(avg_img, glass_brain=False, threshold=avg_threshold)
-    # plotting.plot_activity_map(var_img, glass_brain=False, threshold=var_threshold)
+    avg_threshold_p, var_threshold_p = thresholds_p['avg'], thresholds_p['var']
+
+    plotting.plot_activity_map(avg_img, glass_brain=False, threshold=avg_threshold_p)
+    plotting.plot_activity_map(var_img, glass_brain=False, threshold=var_threshold_p)
 
     # df = copy.copy(coordinates)
     # df['weight'] = 1
