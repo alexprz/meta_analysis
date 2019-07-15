@@ -11,8 +11,8 @@ from .Maps import Maps
 def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p, mask, var, cov):
 
     if (var, cov) == (False, False):
-        random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, 1, p=p)
-        return random_maps.avg().max(), None, None
+        random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_peaks, p=p)
+        return random_maps.avg().smooth(sigma=sigma, inplace=True).max(), None, None
 
     else:
         random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps, p=p)
@@ -32,7 +32,7 @@ def threshold_MC_pool(N_sim, kwargs):
     
     return avgs, vars, covs
 
-@mem.cache
+# @mem.cache
 def threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, stats=['avg', 'var'], N_simulations=5000, sigma=1., verbose=False, p=None, mask=None):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
