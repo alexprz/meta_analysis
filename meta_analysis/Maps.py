@@ -222,22 +222,38 @@ class Maps:
             self.n_voxels, self.n_maps = maps.shape
         self._maps = maps
 
-    def randomize(self, n_peaks, n_maps, inplace=False, p=None):
+    def randomize(self, n_peaks, n_maps, inplace=False, p=None, mask=None):
         if self.Ni is None or self.Nj is None or self.Nk is None:
             raise ValueError('Invalid box size ({}, {}, {}).'.format(Ni, Nj, Nk))
 
         n_voxels = self.Ni*self.Nj*self.Nk
         
-        if p is None: # Uniform distribution across voxels
+        if p is None and mask is None: # Uniform distribution across voxels
             maps = scipy.sparse.csr_matrix(np.random.binomial(n=n_peaks, p=1./(n_voxels*n_maps), size=(n_voxels, n_maps)).astype(float))
         
         else: # Given distribution across voxels
-            
-            if isinstance(p, Maps) and p.n_maps != 1:
-                raise ValueError('Maps object should contain exactly one map to serve as distribution. Given has {} maps.'.format(p.n_maps))
+            if p is None:
+                p = np.ones(n_voxels)/n_voxels
             
             elif isinstance(p, Maps):
+                if p.n_maps != 1:
+                    raise ValueError('Maps object should contain exactly one map to serve as distribution. Given has {} maps.'.format(p.n_maps))
                 p = p.maps.transpose().toarray()[0]
+
+            elif isinstance(p, np.ndarray):
+                print('Shape : {}'.format(p.shape))
+                if p.shape != (self.Ni, self.Nj, self.Nk):
+                    raise ValueError('Invalid numpy array to serve as a distribution. Should be of shape ({}, {}, {}).'.format(self.Ni, self.Nj, self.Nk))
+                p = p.reshape(-1, order='F')
+
+            else:
+                raise ValueError('Invalid distribution p. Must be either Maps object or numpy.ndarray.')
+
+            if mask is not None:
+                mask = mask.reshape(-1, order='Fortran')
+                p = np.ma.masked_array(p, np.logical_not(mask))
+                p /= np.sum(p)
+
 
             maps = scipy.sparse.lil_matrix((n_voxels, n_maps))
             voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)

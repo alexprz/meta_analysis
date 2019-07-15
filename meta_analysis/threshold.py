@@ -8,7 +8,7 @@ from .tools import print_percent
 from .Maps import Maps
 
 
-def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p):
+def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p, mask):
     random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps, p=p)
     avg_map, var_map = random_maps.iterative_smooth_avg_var(sigma, verbose=verbose)
     return avg_map.max(), var_map.max()
@@ -26,7 +26,7 @@ def avg_var_threshold_MC_pool(N_sim, kwargs):
     return avgs, vars
 
 @mem.cache
-def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=1., verbose=False, p=None):
+def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=1., verbose=False, p=None, mask=None):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''
@@ -41,7 +41,8 @@ def avg_var_threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, N_simulations=5000, sigma=
         'n_peaks': n_peaks,
         'n_maps': n_maps,
         'verbose': verbose,
-        'p': p
+        'p': p,
+        'mask': mask
     }
 
     n_list = N_simulations//nb_processes*np.ones(nb_processes).astype(int)
