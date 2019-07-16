@@ -1,3 +1,6 @@
+'''
+    TEST
+'''
 import scipy, copy
 import numpy as np
 import nibabel as nib
@@ -136,6 +139,18 @@ class Maps:
                        z_col='z',
                        weight_col='weight'
                        ):
+        """Summary line.
+
+        Extended description of function.
+
+        Args:
+            arg1 (int): Description of arg1
+            arg2 (str): Description of arg2
+
+        Returns:
+            bool: Description of return value
+
+        """
 
         self.Ni = Ni
         self.Nj = Nj
