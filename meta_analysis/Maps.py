@@ -161,6 +161,7 @@ class Maps:
         self.Nj = Nj
         self.Nk = Nk
         self.affine = affine
+        self.mask = mask
 
         if isinstance(df, pd.DataFrame):
             if groupby_col == None:
@@ -241,6 +242,20 @@ class Maps:
         else:
             self.n_voxels, self.n_maps = maps.shape
         self._maps = maps
+
+    @property
+    def mask(self):
+        if self._maps is None:
+            return None
+
+        return self._maps.reshape((Ni, Nj, Nk), order='F')
+
+    @mask.setter
+    def mask(self, mask):
+        if mask is None:
+            self._mask = None
+        else:
+            self._mask = mask.reshape(-1, order='F')
 
     def randomize(self, n_peaks, n_maps, inplace=False, p=None, mask=None):
         if self.Ni is None or self.Nj is None or self.Nk is None:
