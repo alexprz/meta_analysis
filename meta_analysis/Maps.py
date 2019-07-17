@@ -119,7 +119,7 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
     
     results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
     
-    print('Summing...')
+    print('Merging...')
     for m in results:
         maps += m
 
@@ -247,42 +247,36 @@ class Maps:
             raise ValueError('Invalid box size ({}, {}, {}).'.format(Ni, Nj, Nk))
 
         n_voxels = self.Ni*self.Nj*self.Nk
+
+        if p is None:
+            p = np.ones(n_voxels)/n_voxels
         
-        if p is None and mask is None: # Uniform distribution across voxels
-            maps = scipy.sparse.csr_matrix(np.random.binomial(n=n_peaks, p=1./(n_voxels*n_maps), size=(n_voxels, n_maps)).astype(float))
-        
-        else: # Given distribution across voxels
-            if p is None:
-                p = np.ones(n_voxels)/n_voxels
-            
-            elif isinstance(p, Maps):
-                if p.n_maps != 1:
-                    raise ValueError('Maps object should contain exactly one map to serve as distribution. Given has {} maps.'.format(p.n_maps))
-                p = p.maps.transpose().toarray()[0]
+        elif isinstance(p, Maps):
+            if p.n_maps != 1:
+                raise ValueError('Maps object should contain exactly one map to serve as distribution. Given has {} maps.'.format(p.n_maps))
+            p = p.maps.transpose().toarray()[0]
 
-            elif isinstance(p, np.ndarray):
-                print('Shape : {}'.format(p.shape))
-                if p.shape != (self.Ni, self.Nj, self.Nk):
-                    raise ValueError('Invalid numpy array to serve as a distribution. Should be of shape ({}, {}, {}).'.format(self.Ni, self.Nj, self.Nk))
-                p = p.reshape(-1, order='F')
+        elif isinstance(p, np.ndarray):
+            if p.shape != (self.Ni, self.Nj, self.Nk):
+                raise ValueError('Invalid numpy array to serve as a distribution. Should be of shape ({}, {}, {}).'.format(self.Ni, self.Nj, self.Nk))
+            p = p.reshape(-1, order='F')
 
-            else:
-                raise ValueError('Invalid distribution p. Must be either Maps object or numpy.ndarray.')
+        # else:
+        #     raise ValueError('Invalid distribution p. Must be either Maps object or numpy.ndarray.')
 
-            if mask is not None:
-                mask = mask.reshape(-1, order='Fortran')
-                p = np.ma.masked_array(p, np.logical_not(mask))
-                p /= np.sum(p)
+        if mask is not None:
+            mask = mask.reshape(-1, order='Fortran')
+            p = np.ma.masked_array(p, np.logical_not(mask))
+            p /= np.sum(p)
 
+        maps = scipy.sparse.lil_matrix((n_voxels, n_maps))
+        voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)
 
-            maps = scipy.sparse.lil_matrix((n_voxels, n_maps))
-            voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)
+        for voxel_id in voxels_samples:
+            map_id = np.random.randint(n_maps)
+            maps[voxel_id, map_id] += 1
 
-            for voxel_id in voxels_samples:
-                map_id = np.random.randint(n_maps)
-                maps[voxel_id, map_id] += 1
-
-            maps = scipy.sparse.csr_matrix(maps)
+        maps = scipy.sparse.csr_matrix(maps)
 
 
         new_maps = self if inplace else copy.copy(self)
@@ -396,7 +390,7 @@ class Maps:
         lil_maps = scipy.sparse.lil_matrix(self.maps)
 
         for k in range(self.n_maps):
-            if verbose: print('Smoothing {} out of {}.'.format(k, self.n_maps))
+            if verbose: print('Smoothing {} out of {}.'.format(k+1, self.n_maps))
             data = self.to_data(k)
             data = gaussian_filter(data, sigma=sigma)
             lil_maps[:, k] = data.reshape((-1, 1), order='F')
@@ -486,11 +480,15 @@ class Maps:
         elif shrink == 'LW':
             return LedoitWolf().fit(S.toarray()).covariance_
 
-    def iterative_smooth_avg_var(self, sigma=None, bias=False, verbose=False):
+    def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
             (Less memory usage).
         '''
+
+        if not compute_var:
+            return self.avg().smooth(sigma=sigma), None
+
 
         current_map = self[0]
         if sigma != None:
@@ -500,7 +498,7 @@ class Maps:
 
         for k in range(2, self.n_maps+1):
             if verbose:
-                print('Iterative smooth avg var {} out of {}'.format(k, self.n_maps))
+                print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
             avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
             current_map = self[k-1]
 
@@ -519,6 +517,9 @@ class Maps:
         avg.maps = avg_map_n
         var.maps = var_map_n
 
+        if verbose:
+            print('Iterative smooth avg var {} out of {}... Done'.format(self.n_maps, self.n_maps))
+
         return avg, var
 
     def __iadd__(self, val):
@@ -535,7 +536,7 @@ class Maps:
         return result
 
     def __imul__(self, val):
-        if not self.has_same_header(val):
+        if isinstance(val, Maps) and not self.has_same_header(val):
             warnings.warn('Multiplied maps don\'t have same header.', UserWarning)
 
         self.maps *= val
