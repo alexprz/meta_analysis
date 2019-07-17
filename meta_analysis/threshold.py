@@ -9,14 +9,15 @@ from .Maps import Maps
 
 
 def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p, mask, var, cov):
-
     if (var, cov) == (False, False):
-        random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_peaks, p=p)
-        return random_maps.avg().smooth(sigma=sigma, inplace=True).max(), None, None
+        random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, 1, p=p)
+        map = random_maps.avg()*(1./n_maps)
+        map = map.smooth(sigma=sigma, inplace=True)
+        return map.max(), None, None
 
     else:
         random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, n_maps, p=p)
-        avg_map, var_map = random_maps.iterative_smooth_avg_var(sigma, verbose=verbose)
+        avg_map, var_map = random_maps.iterative_smooth_avg_var(compute_var=var, sigma=sigma, verbose=verbose)
         return avg_map.max(), var_map.max(), None
 
 def threshold_MC_pool(N_sim, kwargs):
