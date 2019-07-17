@@ -26,6 +26,15 @@ def box_size(draw):
     return Ni, Nj, Nk
 
 
+class Test_normalize(unittest.TestCase):
+    @given(maps = random_maps())
+    def test_random(self, maps):
+        maps.normalize(inplace=True)
+        col_sum = np.array(maps.maps.sum(axis=0))[0]
+        expected = np.ones(maps.n_maps)
+        expected[col_sum == 0.] = 0
+
+        self.assertTrue(np.allclose(col_sum, expected))
 
 class Test_avg(unittest.TestCase):
     @given(maps = random_maps())
@@ -80,9 +89,9 @@ class Test_cov(unittest.TestCase):
         self.assertTrue(np.allclose(arr1, arr2))
 
 class Test_iterative_smooth_avg_var(unittest.TestCase):
-    @given(Ni=strats.integers(min_value=1, max_value=100),
-           Nj=strats.integers(min_value=1, max_value=100),
-           Nk=strats.integers(min_value=1, max_value=100),
+    @given(Ni=strats.integers(min_value=1, max_value=10),
+           Nj=strats.integers(min_value=1, max_value=10),
+           Nk=strats.integers(min_value=1, max_value=10),
            n_maps=strats.integers(min_value=1, max_value=10),
            )
     @settings(max_examples=100, deadline=1000)
@@ -97,9 +106,9 @@ class Test_iterative_smooth_avg_var(unittest.TestCase):
         self.assertEqual(var2.maps.nnz, 0)
 
 
-    @given(Ni=strats.integers(min_value=1, max_value=100),
-           Nj=strats.integers(min_value=1, max_value=100),
-           Nk=strats.integers(min_value=1, max_value=100),
+    @given(Ni=strats.integers(min_value=1, max_value=10),
+           Nj=strats.integers(min_value=1, max_value=10),
+           Nk=strats.integers(min_value=1, max_value=10),
            n_maps=strats.integers(min_value=1, max_value=10),
            )
     @settings(max_examples=100, deadline=1000)

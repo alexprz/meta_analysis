@@ -1,8 +1,12 @@
+'''
+    TEST
+'''
 import scipy, copy
 import numpy as np
 import nibabel as nib
 import pandas as pd
 from scipy.ndimage import gaussian_filter
+from sklearn.covariance import LedoitWolf
 
 from .globals import mem
 
@@ -11,7 +15,7 @@ from .tools import print_percent, index_3D_to_1D
 import multiprocessing
 from joblib import Parallel, delayed
 
-def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
+def compute_maps(df, **kwargs):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
         Used for multiprocessing in get_all_maps_associated_to_keyword function.
@@ -22,14 +26,27 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
 
         Returns sparse LIL matrix of shape (len(pmids), Ni*Nj*Nk) containing all the maps
     '''
-
-    maps = scipy.sparse.lil_matrix((n_pmids, Ni*Nj*Nk))
+    Ni = kwargs['Ni']
+    Nj = kwargs['Nj']
+    Nk = kwargs['Nk']
+    Ni_r = kwargs['Ni_r']
+    Nj_r = kwargs['Nj_r']
+    Nk_r = kwargs['Nk_r']
+    inv_affine = kwargs['inv_affine']
+    inv_affine_r = kwargs['inv_affine_r']
+    index_dict = kwargs['index_dict']
+    n_pmids = kwargs['n_pmids']
+    col_names = kwargs['col_names']
+    mask = kwargs['mask']
 
     groupby_col = col_names['groupby']
     x_col = col_names['x']
     y_col = col_names['y']
     z_col = col_names['z']
     weight_col = col_names['weight']
+
+    maps = scipy.sparse.lil_matrix((n_pmids, Ni_r*Nj_r*Nk_r))
+
 
     i_row, n_tot = 0, df.shape[0]
     for index, row in df.iterrows():
@@ -38,18 +55,20 @@ def compute_maps(df, Ni, Nj, Nk, inv_affine, index_dict, n_pmids, col_names):
 
         map_id, weight = index_dict[row[groupby_col]], row[weight_col]
         x, y, z = row[x_col], row[y_col], row[z_col]
+        i_r, j_r, k_r = np.clip(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni_r-1, Nj_r-1, Nk_r-1])
         i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
-        p = index_3D_to_1D(i, j, k, Ni, Nj, Nk)
-        maps[map_id, p] += weight
+        
+        if mask is None or mask[i, j, k] == 1:
+            p = index_3D_to_1D(i_r, j_r, k_r, Ni_r, Nj_r, Nk_r)
+            maps[map_id, p] += weight
 
     return scipy.sparse.csr_matrix(maps)
 
 @mem.cache
-def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, gray_matter_mask=None):
+def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
-        gray_matter_mask : if True, only voxels inside gray_matter_mask are taken into account (NOT IMPLEMENTED YET)
         reduce : integer, reducing scale factor. Ex : if reduce=2, aggregates voxels every 2 voxels in each direction.
                 Notice that this affects the affine and box size.
 
@@ -77,37 +96,74 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, gray_matter_
     for i in range(3):
         affine_r[i, i] = affine[i, i]*reduce
     inv_affine_r = np.linalg.inv(affine_r)
+    inv_affine = np.linalg.inv(affine)
 
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()//2
     splitted_df= np.array_split(df, n_jobs, axis=0)
+
+    kwargs = {
+        'Ni_r': Ni_r,
+        'Nj_r': Nj_r,
+        'Nk_r': Ni_r,
+        'Ni': Ni,
+        'Nj': Nj,
+        'Nk': Nk,
+        'inv_affine_r': inv_affine_r,
+        'inv_affine': inv_affine,
+        'index_dict': index_dict,
+        'n_pmids': n_pmids,
+        'col_names': col_names,
+        'mask': mask
+    }
     
-    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, Ni_r, Nj_r, Nk_r, inv_affine_r, index_dict, n_pmids, col_names) for sub_df in splitted_df)
+    results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
     
-    print('Summing...')
+    print('Merging...')
     for m in results:
         maps += m
+
+    maps = maps.transpose()
     
-    return maps.transpose(), Ni_r, Nj_r, Nk_r, affine_r
+    return maps, Ni_r, Nj_r, Nk_r, affine_r
 
 class Maps:
-    def __init__(self, df_or_shape=None,
+    def __init__(self, df=None,
                        reduce=1,
                        Ni=None, Nj=None, Nk=None,
                        affine=None,
+                       mask=None,
                        groupby_col=None,
                        x_col='x',
                        y_col='y',
                        z_col='z',
                        weight_col='weight'
                        ):
+        '''
+
+
+        Args:
+            df (pandas.DataFrame): Pandas DataFrame containing the (x,y,z) coordinates, the weights and the map id. The names of the columns can be specified.
+            reduce (int): Reducing factor of the map resolution (e.g. if reduce=2, voxels are 2 times larger in every directions).
+            Ni (int): X size of the bounding box.
+            Nj (int): Y size of the bounding box.
+            Nk (int): Z size of the bounding box.
+            affine (numpy.ndarray): Array with shape (4, 4) storing the affine used to compute brain voxels coordinates from world cooridnates.
+            mask (numpy.ndarray): Boolean array with shape (Ni, Nj, Nk). If mask[i, j, k] = False, ignore all (x,y,z) coordinates which have their voxels coordinates equal to (i, j, k).
+            groupby_col (str): Name of the column on which the groupby operation is operated. Or in an equivalent way, the name of the column storing the ids of the maps.
+            x_col (str): Name of the column storing the x coordinates.
+            y_col (str): Name of the column storing the y coordinates.
+            z_col (str): Name of the column storing the z coordinates.
+            weight_col (str): Name of the column storing the weights. 
+        '''
 
         self.Ni = Ni
         self.Nj = Nj
         self.Nk = Nk
         self.affine = affine
+        self.mask = mask
 
-        if isinstance(df_or_shape, pd.DataFrame):
+        if isinstance(df, pd.DataFrame):
             if groupby_col == None:
                 raise ValueError('Must specify column name to group by maps.')
 
@@ -122,18 +178,18 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, affine, reduce=reduce)
+            self._maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=mask, reduce=reduce)
             self.n_voxels, self.n_maps = self._maps.shape
 
-        elif isinstance(df_or_shape, tuple):
-            self._maps = scipy.sparse.csr_matrix(df_or_shape)
+        elif isinstance(df, tuple):
+            self._maps = scipy.sparse.csr_matrix(df)
             self.n_voxels, self.n_maps = self._maps.shape
 
-        elif isinstance(df_or_shape, int):
-            self._maps = scipy.sparse.csr_matrix((df_or_shape, 1))
+        elif isinstance(df, int):
+            self._maps = scipy.sparse.csr_matrix((df, 1))
             self.n_voxels, self.n_maps = self._maps.shape
 
-        elif df_or_shape is None:
+        elif df is None:
             self._maps = None
             self.n_voxels, self.n_maps = 0, 0
 
@@ -143,7 +199,7 @@ class Maps:
 
     @classmethod
     def zeros(cls, shape, **kwargs):
-        return cls(df_or_shape=shape, **kwargs)
+        return cls(df=shape, **kwargs)
 
     def copy_header(self, other):
         self.Ni = other.Ni
@@ -187,8 +243,56 @@ class Maps:
             self.n_voxels, self.n_maps = maps.shape
         self._maps = maps
 
-    def randomize(self, n_peaks, n_maps, inplace=False):
-        maps = scipy.sparse.csr_matrix(np.random.binomial(n=n_peaks, p=1./(self.Ni*self.Nj*self.Nk*n_maps), size=(self.Ni*self.Nj*self.Nk, n_maps)).astype(float))
+    @property
+    def mask(self):
+        if self._maps is None:
+            return None
+
+        return self._maps.reshape((Ni, Nj, Nk), order='F')
+
+    @mask.setter
+    def mask(self, mask):
+        if mask is None:
+            self._mask = None
+        else:
+            self._mask = mask.reshape(-1, order='F')
+
+    def randomize(self, n_peaks, n_maps, inplace=False, p=None, mask=None):
+        if self.Ni is None or self.Nj is None or self.Nk is None:
+            raise ValueError('Invalid box size ({}, {}, {}).'.format(Ni, Nj, Nk))
+
+        n_voxels = self.Ni*self.Nj*self.Nk
+
+        if p is None:
+            p = np.ones(n_voxels)/n_voxels
+        
+        elif isinstance(p, Maps):
+            if p.n_maps != 1:
+                raise ValueError('Maps object should contain exactly one map to serve as distribution. Given has {} maps.'.format(p.n_maps))
+            p = p.maps.transpose().toarray()[0]
+
+        elif isinstance(p, np.ndarray):
+            if p.shape != (self.Ni, self.Nj, self.Nk):
+                raise ValueError('Invalid numpy array to serve as a distribution. Should be of shape ({}, {}, {}).'.format(self.Ni, self.Nj, self.Nk))
+            p = p.reshape(-1, order='F')
+
+        # else:
+        #     raise ValueError('Invalid distribution p. Must be either Maps object or numpy.ndarray.')
+
+        if mask is not None:
+            mask = mask.reshape(-1, order='Fortran')
+            p = np.ma.masked_array(p, np.logical_not(mask))
+            p /= np.sum(p)
+
+        maps = scipy.sparse.lil_matrix((n_voxels, n_maps))
+        voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)
+
+        for voxel_id in voxels_samples:
+            map_id = np.random.randint(n_maps)
+            maps[voxel_id, map_id] += 1
+
+        maps = scipy.sparse.csr_matrix(maps)
+
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = maps
@@ -301,7 +405,7 @@ class Maps:
         lil_maps = scipy.sparse.lil_matrix(self.maps)
 
         for k in range(self.n_maps):
-            if verbose: print('Smoothing {} out of {}.'.format(k, self.n_maps))
+            if verbose: print('Smoothing {} out of {}.'.format(k+1, self.n_maps))
             data = self.to_data(k)
             data = gaussian_filter(data, sigma=sigma)
             lil_maps[:, k] = data.reshape((-1, 1), order='F')
@@ -364,7 +468,7 @@ class Maps:
         var_map.maps = self.variance(self._maps, bias=bias)
         return var_map
 
-    def cov(self, bias=False):
+    def cov(self, bias=False, shrink=None):
         '''
             Builds the empirical unbiased covariance matrix of the given maps on the second axis.
 
@@ -382,13 +486,24 @@ class Maps:
         M2 = self._maps.dot(e2)
         M3 = self._maps.dot(self._maps.transpose())/((self.n_maps-ddof))
 
-        return M3 - M1.dot(M2.transpose())
+        # Empirical covariance matrix
+        S =  M3 - M1.dot(M2.transpose())
 
-    def iterative_smooth_avg_var(self, sigma=None, bias=False, verbose=False):
+        if shrink is None:
+            return S
+
+        elif shrink == 'LW':
+            return LedoitWolf().fit(S.toarray()).covariance_
+
+    def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
             (Less memory usage).
         '''
+
+        if not compute_var:
+            return self.avg().smooth(sigma=sigma), None
+
 
         current_map = self[0]
         if sigma != None:
@@ -398,7 +513,7 @@ class Maps:
 
         for k in range(2, self.n_maps+1):
             if verbose:
-                print('Iterative smooth avg var {} out of {}'.format(k, self.n_maps))
+                print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
             avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
             current_map = self[k-1]
 
@@ -417,6 +532,9 @@ class Maps:
         avg.maps = avg_map_n
         var.maps = var_map_n
 
+        if verbose:
+            print('Iterative smooth avg var {} out of {}... Done'.format(self.n_maps, self.n_maps))
+
         return avg, var
 
     def __iadd__(self, val):
@@ -433,7 +551,7 @@ class Maps:
         return result
 
     def __imul__(self, val):
-        if not self.has_same_header(val):
+        if isinstance(val, Maps) and not self.has_same_header(val):
             warnings.warn('Multiplied maps don\'t have same header.', UserWarning)
 
         self.maps *= val
@@ -446,3 +564,4 @@ class Maps:
 
     def __getitem__(self, key):
         return self.maps[:, key]
+

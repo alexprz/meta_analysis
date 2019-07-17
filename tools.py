@@ -1,9 +1,10 @@
 import numpy as np
 import nibabel as nib
-
-from globals import mem, input_path, Ni, Nj, Nk, coordinates, affine, inv_affine, corpus_tfidf
+import copy
 from scipy.ndimage import gaussian_filter
 
+from globals import mem, input_path, Ni, Nj, Nk, coordinates, affine, inv_affine, corpus_tfidf, gray_mask
+from meta_analysis import Maps
 
 @mem.cache
 def build_index(file_path):
@@ -53,3 +54,11 @@ def build_df_from_keyword(keyword):
     df = coordinates[coordinates['pmid'].isin(nonzero_pmids)]
     df['weight'] = 1
     return df
+
+def build_avg_map_corpus(sigma):
+    df = copy.copy(coordinates)
+    df['weight'] = 1
+
+    all_maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid', mask=gray_mask.get_data())
+
+    return all_maps.avg().smooth(sigma=sigma, inplace=True)
