@@ -4,3 +4,5 @@ line_profiler
 cache_joblib
 .hypothesis
 /plot/*
+doc
+save
