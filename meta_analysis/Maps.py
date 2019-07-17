@@ -128,7 +128,7 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
     return maps, Ni_r, Nj_r, Nk_r, affine_r
 
 class Maps:
-    def __init__(self, df_or_shape=None,
+    def __init__(self, df=None,
                        reduce=1,
                        Ni=None, Nj=None, Nk=None,
                        affine=None,
@@ -139,25 +139,30 @@ class Maps:
                        z_col='z',
                        weight_col='weight'
                        ):
-        """Summary line.
+        '''
 
-        Extended description of function.
 
         Args:
-            arg1 (int): Description of arg1
-            arg2 (str): Description of arg2
-
-        Returns:
-            bool: Description of return value
-
-        """
+            df (pandas.DataFrame): Pandas DataFrame containing the (x,y,z) coordinates, the weights and the map id. The names of the columns can be specified.
+            reduce (int): Reducing factor of the map resolution (e.g. if reduce=2, voxels are 2 times larger in every directions).
+            Ni (int): X size of the bounding box.
+            Nj (int): Y size of the bounding box.
+            Nk (int): Z size of the bounding box.
+            affine (numpy.ndarray): Array with shape (4, 4) storing the affine used to compute brain voxels coordinates from world cooridnates.
+            mask (numpy.ndarray): Boolean array with shape (Ni, Nj, Nk). If mask[i, j, k] = False, ignore all (x,y,z) coordinates which have their voxels coordinates equal to (i, j, k).
+            groupby_col (str): Name of the column on which the groupby operation is operated. Or in an equivalent way, the name of the column storing the ids of the maps.
+            x_col (str): Name of the column storing the x coordinates.
+            y_col (str): Name of the column storing the y coordinates.
+            z_col (str): Name of the column storing the z coordinates.
+            weight_col (str): Name of the column storing the weights. 
+        '''
 
         self.Ni = Ni
         self.Nj = Nj
         self.Nk = Nk
         self.affine = affine
 
-        if isinstance(df_or_shape, pd.DataFrame):
+        if isinstance(df, pd.DataFrame):
             if groupby_col == None:
                 raise ValueError('Must specify column name to group by maps.')
 
@@ -172,18 +177,18 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df_or_shape, col_names, Ni, Nj, Nk, affine, mask=mask, reduce=reduce)
+            self._maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=mask, reduce=reduce)
             self.n_voxels, self.n_maps = self._maps.shape
 
-        elif isinstance(df_or_shape, tuple):
-            self._maps = scipy.sparse.csr_matrix(df_or_shape)
+        elif isinstance(df, tuple):
+            self._maps = scipy.sparse.csr_matrix(df)
             self.n_voxels, self.n_maps = self._maps.shape
 
-        elif isinstance(df_or_shape, int):
-            self._maps = scipy.sparse.csr_matrix((df_or_shape, 1))
+        elif isinstance(df, int):
+            self._maps = scipy.sparse.csr_matrix((df, 1))
             self.n_voxels, self.n_maps = self._maps.shape
 
-        elif df_or_shape is None:
+        elif df is None:
             self._maps = None
             self.n_voxels, self.n_maps = 0, 0
 
@@ -193,7 +198,7 @@ class Maps:
 
     @classmethod
     def zeros(cls, shape, **kwargs):
-        return cls(df_or_shape=shape, **kwargs)
+        return cls(df=shape, **kwargs)
 
     def copy_header(self, other):
         self.Ni = other.Ni
