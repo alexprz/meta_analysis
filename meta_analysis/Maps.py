@@ -285,7 +285,6 @@ class Maps:
         else:
             self._mask = mask.reshape(-1, order='F')
 
-    @profile
     def randomize(self, n_peaks, n_maps, inplace=False, p=None, mask=None):
         if self.Ni is None or self.Nj is None or self.Nk is None:
             raise ValueError('Invalid box size ({}, {}, {}).'.format(Ni, Nj, Nk))
@@ -315,10 +314,11 @@ class Maps:
 
         maps = scipy.sparse.dok_matrix((n_voxels, n_maps))
         voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)
+        voxels_samples_unique, counts = np.unique(voxels_samples, return_counts=True)
 
-        for voxel_id in voxels_samples:
+        for i in range(len(voxels_samples_unique)):
             map_id = np.random.randint(n_maps)
-            maps[voxel_id, map_id] += 1
+            maps[voxels_samples_unique[i], map_id] = counts[i]
 
         maps = scipy.sparse.csr_matrix(maps)
 
@@ -424,22 +424,12 @@ class Maps:
         return new_maps
 
     @staticmethod
-    # @profile
     def smooth_map(map, sigma, Ni, Nj, Nk):
         data = Maps.map_to_data(map, Ni, Nj, Nk)
         data = gaussian_filter(data, sigma=sigma)
         data_reshaped = data.reshape((-1, 1), order='F')
         map = scipy.sparse.csr_matrix(data_reshaped)
         return map
-
-    @staticmethod
-    def my_smooth_map(map, sigma, Ni, Nj, Nk, truncate=4.):
-        filter_half_width = np.floor(truncate*sigma)
-        print(filter_half_width)
-        # for i in range(Ni):
-        #     for j in range(Nj):
-        #         for k in range(Nk):
-
 
     @staticmethod
     def smooth_data(data, sigma):
@@ -543,7 +533,6 @@ class Maps:
         elif shrink == 'LW':
             return LedoitWolf().fit(S.toarray()).covariance_
 
-    # @profile
     def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
@@ -552,8 +541,6 @@ class Maps:
 
         if not compute_var:
             return self.avg().smooth(sigma=sigma), None
-
-        # self._maps = scipy.sparse.csc_matrix(self._maps)
 
         current_map = self[0] if self.save_memory else self._maps_dense[:, :, :, 0]
         if sigma != None:
@@ -566,9 +553,6 @@ class Maps:
         var_map_n = Maps.zeros(self.n_voxels).maps if self.save_memory else np.zeros((self.Ni, self.Nj, self.Nk))
 
         for k in range(2, self.n_maps+1):
-            # break
-            # print('SHAPE : {}'.format(var_map_n.shape))
-            # print('SHAPE : {}'.format(current_map.shape))
             if verbose:
                 print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
             avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
@@ -596,8 +580,7 @@ class Maps:
 
         avg = Maps().copy_header(self)
         var = Maps().copy_header(self)
-        print('SHAPE : {}'.format(avg_map_n.shape))
-        print('SHAPE : {}'.format(self.data_to_map(avg_map_n).shape))
+
         avg.maps = avg_map_n if self.save_memory else self.data_to_map(avg_map_n)
         var.maps = var_map_n if self.save_memory else self.data_to_map(var_map_n)
 
