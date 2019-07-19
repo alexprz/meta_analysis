@@ -14,6 +14,9 @@ from meta_analysis import plotting, Maps
 from globals import coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine, pickle_path, gray_mask
 from tools import build_activity_map_from_pmid, build_df_from_keyword, build_avg_map_corpus
 
+import matplotlib
+matplotlib.use('MacOsx')
+
 if __name__ == '__main__':
     # Step 1 : Plot activity map from a given pmid
     pmid = 16723214 

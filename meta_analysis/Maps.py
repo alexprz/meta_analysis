@@ -137,7 +137,8 @@ class Maps:
                        x_col='x',
                        y_col='y',
                        z_col='z',
-                       weight_col='weight'
+                       weight_col='weight',
+                       save_memory=True
                        ):
         '''
 
@@ -162,6 +163,8 @@ class Maps:
         self.Nk = Nk
         self.affine = affine
         self.mask = mask
+        self._save_memory = save_memory
+        self._maps_dense =  None
 
         if isinstance(df, pd.DataFrame):
             if groupby_col == None:
@@ -178,15 +181,15 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=mask, reduce=reduce)
+            self.maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=mask, reduce=reduce)
             self.n_voxels, self.n_maps = self._maps.shape
 
         elif isinstance(df, tuple):
-            self._maps = scipy.sparse.csr_matrix(df)
+            self.maps = scipy.sparse.csr_matrix(df)
             self.n_voxels, self.n_maps = self._maps.shape
 
         elif isinstance(df, int):
-            self._maps = scipy.sparse.csr_matrix((df, 1))
+            self.maps = scipy.sparse.csr_matrix((df, 1))
             self.n_voxels, self.n_maps = self._maps.shape
 
         elif df is None:
@@ -206,6 +209,7 @@ class Maps:
         self.Nj = other.Nj
         self.Nk = other.Nk
         self.affine = other.affine
+        self._save_memory = other._save_memory
 
         return self
 
@@ -232,6 +236,19 @@ class Maps:
         return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self.Ni, self.Nj, self.Nk, self.affine, self.maps)
 
     @property
+    def save_memory(self):
+        return self._save_memory
+
+    @save_memory.setter
+    def save_memory(self, save_memory):
+        self._save_memory = save_memory
+
+        if save_memory:
+            if hasattr(self, '_maps_dense'): del self._maps_dense
+        else:
+            self._set_dense_maps()
+
+    @property
     def maps(self):
         return self._maps
 
@@ -239,9 +256,20 @@ class Maps:
     def maps(self, maps):
         if maps is None:
             self.n_voxels, self.n_maps = 0, 0
+
         else:
             self.n_voxels, self.n_maps = maps.shape
+
         self._maps = maps
+
+        if hasattr(self, '_save_memory') and not self._save_memory:
+            self._set_dense_maps()
+
+    def _set_dense_maps(self):
+        if self._maps is None:
+            self._maps_dense = None
+        else:
+            self._maps_dense = self._maps.toarray().reshape((self.Ni, self.Nj, self.Nk, self.n_maps), order='F')
 
     @property
     def mask(self):
@@ -284,12 +312,13 @@ class Maps:
             p = np.ma.masked_array(p, np.logical_not(mask))
             p /= np.sum(p)
 
-        maps = scipy.sparse.lil_matrix((n_voxels, n_maps))
+        maps = scipy.sparse.dok_matrix((n_voxels, n_maps))
         voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)
+        voxels_samples_unique, counts = np.unique(voxels_samples, return_counts=True)
 
-        for voxel_id in voxels_samples:
+        for i in range(len(voxels_samples_unique)):
             map_id = np.random.randint(n_maps)
-            maps[voxel_id, map_id] += 1
+            maps[voxels_samples_unique[i], map_id] = counts[i]
 
         maps = scipy.sparse.csr_matrix(maps)
 
@@ -322,6 +351,10 @@ class Maps:
             raise KeyError('This Maps object contains {} maps, specify which map to convert to data.'.format(self.n_maps))
 
         return self.map_to_data(self._maps[:, 0], self.Ni, self.Nj, self.Nk)
+
+    @staticmethod
+    def data_to_map(data):
+        return scipy.sparse.csr_matrix(data.reshape((-1, 1), order='F'))
 
     @staticmethod
     def data_to_img(data, affine):
@@ -394,8 +427,13 @@ class Maps:
     def smooth_map(map, sigma, Ni, Nj, Nk):
         data = Maps.map_to_data(map, Ni, Nj, Nk)
         data = gaussian_filter(data, sigma=sigma)
-        map = scipy.sparse.csr_matrix(data.reshape((-1, 1), order='F'))
+        data_reshaped = data.reshape((-1, 1), order='F')
+        map = scipy.sparse.csr_matrix(data_reshaped)
         return map
+
+    @staticmethod
+    def smooth_data(data, sigma):
+        return gaussian_filter(data, sigma=sigma)
 
     def smooth(self, sigma, inplace=False, verbose=False):
         '''
@@ -504,33 +542,47 @@ class Maps:
         if not compute_var:
             return self.avg().smooth(sigma=sigma), None
 
-
-        current_map = self[0]
+        current_map = self[0] if self.save_memory else self._maps_dense[:, :, :, 0]
         if sigma != None:
-            current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
+                if self.save_memory:
+                    current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
+                else:
+                    current_map = self.smooth_data(current_map, sigma)
+
         avg_map_n = copy.copy(current_map)
-        var_map_n = Maps.zeros(self.n_voxels).maps
+        var_map_n = Maps.zeros(self.n_voxels).maps if self.save_memory else np.zeros((self.Ni, self.Nj, self.Nk))
 
         for k in range(2, self.n_maps+1):
             if verbose:
                 print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
             avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
-            current_map = self[k-1]
+            current_map = self[k-1] if self.save_memory else self._maps_dense[:, :, :, k-1]
 
             if sigma != None:
-                current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
+                if self.save_memory:
+                    current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
+                else:
+                    current_map = self.smooth_data(current_map, sigma)
 
             avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
 
             if bias:
-                var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
+                if self.save_memory:
+                    var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
+                else:
+                    var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*np.power(avg_map_p - avg_map_n, 2) + 1./(k)*np.power(current_map-avg_map_n, 2)
+
             else:
-                var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
+                if self.save_memory:
+                    var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
+                else:
+                    var_map_n = (k-2)/(k-1)*var_map_p + np.power(avg_map_p - avg_map_n, 2) + 1./(k-1)*np.power(current_map-avg_map_n, 2)
 
         avg = Maps().copy_header(self)
         var = Maps().copy_header(self)
-        avg.maps = avg_map_n
-        var.maps = var_map_n
+
+        avg.maps = avg_map_n if self.save_memory else self.data_to_map(avg_map_n)
+        var.maps = var_map_n if self.save_memory else self.data_to_map(var_map_n)
 
         if verbose:
             print('Iterative smooth avg var {} out of {}... Done'.format(self.n_maps, self.n_maps))
