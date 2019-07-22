@@ -328,6 +328,13 @@ class Maps:
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
 
+    @property
+    def atlas(self):
+        return self._atlas
+
+    @atlas.setter
+    def atlas(self, atlas):
+        self.set_atlas(atlas)
 
     def _set_dense_maps(self):
         if self._maps is None:
