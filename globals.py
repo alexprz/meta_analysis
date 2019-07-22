@@ -18,3 +18,5 @@ inv_affine = np.linalg.inv(affine)
 
 coordinates = pd.read_csv(input_path+'coordinates.csv')
 corpus_tfidf = scipy.sparse.load_npz(input_path+'corpus_tfidf.npz')
+
+atlas = datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
