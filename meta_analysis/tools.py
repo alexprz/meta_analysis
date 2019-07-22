@@ -1,5 +1,8 @@
 
-def print_percent(index, total, prefix='', rate=10000):
+def print_percent(index, total, prefix='', rate=10000, verbose=True):
+    if not verbose:
+        return
+        
     if (total//rate) == 0 or index % (total//rate) == 0:
         print(prefix+str(round(100*index/total, 1))+'%')
 

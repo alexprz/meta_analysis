@@ -15,6 +15,7 @@ from .tools import print_percent, index_3D_to_1D
 import multiprocessing
 from joblib import Parallel, delayed
 
+# @profile
 def compute_maps(df, **kwargs):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
@@ -29,43 +30,38 @@ def compute_maps(df, **kwargs):
     Ni = kwargs['Ni']
     Nj = kwargs['Nj']
     Nk = kwargs['Nk']
-    Ni_r = kwargs['Ni_r']
-    Nj_r = kwargs['Nj_r']
-    Nk_r = kwargs['Nk_r']
     inv_affine = kwargs['inv_affine']
-    inv_affine_r = kwargs['inv_affine_r']
     index_dict = kwargs['index_dict']
-    n_pmids = kwargs['n_pmids']
-    col_names = kwargs['col_names']
+    n_maps = kwargs['n_maps']
     mask = kwargs['mask']
+    verbose = kwargs['verbose']
 
+    col_names = kwargs['col_names']
     groupby_col = col_names['groupby']
     x_col = col_names['x']
     y_col = col_names['y']
     z_col = col_names['z']
     weight_col = col_names['weight']
 
-    maps = scipy.sparse.lil_matrix((n_pmids, Ni_r*Nj_r*Nk_r))
+    maps = scipy.sparse.lil_matrix((n_maps, Ni*Nj*Nk))
 
+    n_tot = df.shape[0]
+    for i_row, row in enumerate(zip(df[groupby_col], df[x_col], df[y_col], df[z_col], df[weight_col])):
+        print_percent(i_row, n_tot, verbose=verbose)
 
-    i_row, n_tot = 0, df.shape[0]
-    for index, row in df.iterrows():
-        print_percent(i_row, n_tot)
-        i_row += 1
+        groupby_id, x, y, z, weight = row
+        map_id = index_dict[groupby_id]
 
-        map_id, weight = index_dict[row[groupby_col]], row[weight_col]
-        x, y, z = row[x_col], row[y_col], row[z_col]
-        i_r, j_r, k_r = np.clip(np.floor(np.dot(inv_affine_r, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni_r-1, Nj_r-1, Nk_r-1])
         i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
         
         if mask is None or mask[i, j, k] == 1:
-            p = index_3D_to_1D(i_r, j_r, k_r, Ni_r, Nj_r, Nk_r)
+            p = Maps.coord_to_id(i, j, k, Ni, Nj, Nk)
             maps[map_id, p] += weight
 
     return scipy.sparse.csr_matrix(maps)
 
-@mem.cache
-def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
+# @mem.cache
+def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=False):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
@@ -73,8 +69,8 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
                 Notice that this affects the affine and box size.
 
         Returns 
-            maps: sparse CSR matrix of shape (n_voxels, n_pmids) containing all the related flattenned maps where
-                    n_pmids is the number of pmids related to the keyword
+            maps: sparse CSR matrix of shape (n_voxels, n_maps) containing all the related flattenned maps where
+                    n_maps is the number of pmids related to the keyword
                     n_voxels is the number of voxels in the box (may have changed if reduce != 1)
             Ni_r, Nj_r, Nk_r: new box dimension (changed if reduce != 1)
             affine_r: new affine (changed if reduce != 1)
@@ -82,39 +78,26 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
 
     # Creating map index
     unique_pmid = df['pmid'].unique()
-    n_pmids = len(unique_pmid)
+    n_maps = len(unique_pmid)
     index_dict = {k:v for v, k in enumerate(unique_pmid)}
 
-    # Computing new box size according to the reducing factor
-    Ni_r, Nj_r, Nk_r = np.ceil(np.array((Ni, Nj, Nk))/reduce).astype(int)
-
     # LIL format allows faster incremental construction of sparse matrix
-    maps = scipy.sparse.csr_matrix((n_pmids, Ni_r*Nj_r*Nk_r))
-
-    # Changing affine to the new box size
-    affine_r = np.copy(affine)
-    for i in range(3):
-        affine_r[i, i] = affine[i, i]*reduce
-    inv_affine_r = np.linalg.inv(affine_r)
-    inv_affine = np.linalg.inv(affine)
+    maps = scipy.sparse.csr_matrix((n_maps, Ni*Nj*Nk))
 
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()//2
     splitted_df= np.array_split(df, n_jobs, axis=0)
 
     kwargs = {
-        'Ni_r': Ni_r,
-        'Nj_r': Nj_r,
-        'Nk_r': Ni_r,
         'Ni': Ni,
         'Nj': Nj,
         'Nk': Nk,
-        'inv_affine_r': inv_affine_r,
-        'inv_affine': inv_affine,
+        'inv_affine': np.linalg.inv(affine),
         'index_dict': index_dict,
-        'n_pmids': n_pmids,
+        'n_maps': n_maps,
         'col_names': col_names,
-        'mask': mask
+        'mask': None if mask is None else mask.get_fdata(),
+        'verbose': verbose
     }
     
     results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
@@ -125,7 +108,7 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
 
     maps = maps.transpose()
     
-    return maps, Ni_r, Nj_r, Nk_r, affine_r
+    return maps
 
 class Atlas:
     def __init__(self, atlas):
@@ -158,7 +141,8 @@ class Maps:
                        y_col='y',
                        z_col='z',
                        weight_col='weight',
-                       save_memory=True
+                       save_memory=True,
+                       verbose=False
                        ):
         '''
 
@@ -211,7 +195,7 @@ class Maps:
                 'weight': weight_col
             }
 
-            self.maps, self.Ni, self.Nj, self.Nk, self.affine = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=mask, reduce=reduce)
+            self.maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=nifti_mask, verbose=verbose)
             self.n_voxels, self.n_maps = self._maps.shape
 
         elif isinstance(df, tuple):
@@ -270,10 +254,18 @@ class Maps:
         string += 'Atlas Map : \n{}\n'
         return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self.Ni, self.Nj, self.Nk, self.affine, self._atlas is not None, self.maps, self._maps_atlas)
 
-    def coord_to_id(self, i, j, k):
+    @staticmethod
+    def coord_to_id(i, j, k, Ni, Nj, Nk):
+        return np.ravel_multi_index((i, j, k), (Ni, Nj, Nk), order='F')
+
+    @staticmethod
+    def id_to_coord(id, Ni, Nj, Nk):
+        return np.unravel_index(id, (Ni, Nj, Nk), order='F')
+
+    def _coord_to_id(self, i, j, k):
         return np.ravel_multi_index((i, j, k), (self.Ni, self.Nj, self.Nk), order='F')
 
-    def id_to_coord(self, id):
+    def _id_to_coord(self, id):
         return np.unravel_index(id, (self.Ni, self.Nj, self.Nk), order='F')
 
     def flatten_array(self, array):
@@ -290,7 +282,7 @@ class Maps:
 
         self.maps = filter_matrix.dot(self.maps)
         self.nifti_mask = nifti_mask
-        self.id_to_coord, self.coord_to_id = self.build_index(nifti_mask)
+        # self.id_to_coord, self.coord_to_id = self.build_index(nifti_mask)
 
     # def build_index(self, nifti_mask):
     #     mask_data = self.flatten_array(nifti_mask.get_fdata())
