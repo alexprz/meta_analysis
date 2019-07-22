@@ -127,6 +127,24 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
     
     return maps, Ni_r, Nj_r, Nk_r, affine_r
 
+class Atlas:
+    def __init__(self, atlas):
+        self.atlas = None
+        self.atlas_img = None
+        self.data = None
+        self.labels = None
+        self.n_labels = None
+
+        if atlas is None:
+            return
+
+        self.atlas = atlas
+        self.atlas_img = nilearn.image.load_img(atlas['maps'])
+        self.data = self.atlas_img.get_fdata()
+        self.labels = atlas['labels']
+        self.n_labels = len(self.labels)
+
+
 class Maps:
     def __init__(self, df=None,
                        reduce=1,
@@ -173,7 +191,7 @@ class Maps:
         self.id_to_coord_index = None
         self.coord_to_id_index = None
 
-        self._atlas = atlas
+        self._atlas = Atlas(atlas)
         self._maps_atlas = None
 
 
@@ -210,7 +228,7 @@ class Maps:
         else:
             raise ValueError('First argument not understood. Must be pandas df, int or length 2 tuple.')
 
-        self._build_atlas_maps(atlas)
+        self._build_atlas_maps()
 
 
     @classmethod
@@ -284,19 +302,16 @@ class Maps:
     #     return id_to_coord_index, coord_to_id_index
 
     # @profile
-    def _build_atlas_maps(self, atlas):
-        if atlas is None:
+    def _build_atlas_maps(self):
+        if self._atlas.atlas is None:
             return
 
-        atlas_img = nilearn.image.load_img(atlas['maps'])
-        atlas_data = self.flatten_array(atlas_img.get_fdata())
+        print(self._atlas)
+        print(self._atlas.data)
+        atlas_data = self.flatten_array(self._atlas.data)
+        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self.n_voxels))
 
-        labels = atlas['labels']
-        n_labels = len(labels)
-
-        filter_matrix = scipy.sparse.lil_matrix((n_labels, self.n_voxels))
-
-        for k in range(n_labels):
+        for k in range(self._atlas.n_labels):
             row = atlas_data == k
             filter_matrix[k, row] = 1
 
@@ -460,6 +475,23 @@ class Maps:
             raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self.n_maps))
 
         return self.map_to_img(self._maps[:, 0], self.Ni, self.Nj, self.Nk, self.affine)
+
+    def to_data_atlas(self, map_id=0, ignore_bg=True):
+        if self._atlas is None:
+            raise ValueError('No atlas were given.')
+
+        n_labels = self._atlas.n_labels
+        data_atlas = self._atlas.data
+        data = np.zeros((self.Ni, self.Nj, self.Nk))
+        start = 1 if ignore_bg else 0
+
+        for k in range(start, n_labels):
+            data[data_atlas == k] = self._maps_atlas[k, map_id]
+
+        return data
+
+    def to_img_atlas(self, map_id=0, ignore_bg=True):
+        return self.data_to_img(self.to_data_atlas(map_id=map_id, ignore_bg=ignore_bg), self.affine)
 
     def n_peaks(self, atlas=False):
         '''
