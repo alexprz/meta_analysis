@@ -169,6 +169,8 @@ class Maps:
 
 
         self.nifti_mask = nifti_mask
+        self.id_to_coord_index = None
+        self.coord_to_id_index = None
 
 
         if isinstance(df, pd.DataFrame):
@@ -244,7 +246,7 @@ class Maps:
         return np.ravel_multi_index((i, j, k), (self.Ni, self.Nj, self.Nk), order='F')
 
     def id_to_coord(self, id):
-        return np.unravel_index(p, (self.Ni, self.Nj, self.Nk), order='F')
+        return np.unravel_index(id, (self.Ni, self.Nj, self.Nk), order='F')
 
     def flatten_array(self, array):
         return array.reshape(-1, order='F')
@@ -257,9 +259,21 @@ class Maps:
         mask_data = self.flatten_array(nifti_mask.get_fdata())
 
         filter_matrix = scipy.sparse.diags(mask_data, format='csr')
-        print(filter_matrix)
+
         self.maps = filter_matrix.dot(self.maps)
         self.nifti_mask = nifti_mask
+        self.id_to_coord, self.coord_to_id = self.build_index(nifti_mask)
+
+    def build_index(self, nifti_mask):
+        mask_data = self.flatten_array(nifti_mask.get_fdata())
+
+        nonzero_id = np.nonzero(mask_data)[0]
+
+        id_to_coord_index = {id: self.id_to_coord(id) for id in nonzero_id}
+        coord_to_id_index = {v: k for k, v in id_to_coord_index.items()}
+
+        return id_to_coord_index, coord_to_id_index
+
 
     @property
     def save_memory(self):
