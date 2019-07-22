@@ -627,17 +627,27 @@ class Maps:
         var_map._maps_atlas = self.variance(self._maps_atlas, bias=bias)
         return var_map
 
-    def cov(self, atlas=True, bias=False, shrink=None):
+    def cov(self, atlas=True, bias=False, shrink=None, sparse=False, ignore_bg=True):
         '''
             Builds the empirical unbiased covariance matrix of the given maps on the second axis.
 
             Returns a sparse CSR matrix of shape (n_voxels, n_voxels) representing the covariance matrix.
         '''
+        if self._atlas.atlas is None:
+            raise ValueError('No atlas. Must specify an atlas when initializing Maps or specify atlas=False in cov() function.')
+
         if not bias and self.n_maps <= 1:
             raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self.n_maps))
 
         maps = self._get_maps(atlas=atlas)
         ddof = 0 if bias else 1
+
+        if atlas:
+            labels = self._atlas.labels
+            if ignore_bg:
+                maps[0, :] = 0
+                labels = labels[1:]
+
 
         e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose()
         e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose()
@@ -649,11 +659,14 @@ class Maps:
         # Empirical covariance matrix
         S =  M3 - M1.dot(M2.transpose())
 
-        if shrink is None:
-            return S
+        if not sparse:
+            S = S.toarray()
 
-        elif shrink == 'LW':
-            return LedoitWolf().fit(S.toarray()).covariance_
+        if shrink == 'LW':
+            S = LedoitWolf().fit(S.toarray()).covariance_
+
+        return S, labels if atlas else S
+
 
     def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
