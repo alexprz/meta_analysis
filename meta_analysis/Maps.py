@@ -133,6 +133,7 @@ class Maps:
                        Ni=None, Nj=None, Nk=None,
                        affine=None,
                        mask=None,
+                       nifti_mask=None,
                        groupby_col=None,
                        x_col='x',
                        y_col='y',
@@ -165,6 +166,10 @@ class Maps:
         self.mask = mask
         self._save_memory = save_memory
         self._maps_dense =  None
+
+
+        self.nifti_mask = nifti_mask
+
 
         if isinstance(df, pd.DataFrame):
             if groupby_col == None:
@@ -234,6 +239,27 @@ class Maps:
         string += 'Affine :\n{}\n'
         string += 'Map : \n{}\n'
         return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self.Ni, self.Nj, self.Nk, self.affine, self.maps)
+
+    def coord_to_id(self, i, j, k):
+        return np.ravel_multi_index((i, j, k), (self.Ni, self.Nj, self.Nk), order='F')
+
+    def id_to_coord(self, id):
+        return np.unravel_index(p, (self.Ni, self.Nj, self.Nk), order='F')
+
+    def flatten_array(self, array):
+        return array.reshape(-1, order='F')
+
+    def unflatten_array(self, array):
+        return array.reshape((self.Ni, self.Nj, self.Nk), order='F')
+
+    def apply_mask(self, nifti_mask):
+
+        mask_data = self.flatten_array(nifti_mask.get_fdata())
+
+        filter_matrix = scipy.sparse.diags(mask_data, format='csr')
+        print(filter_matrix)
+        self.maps = filter_matrix.dot(self.maps)
+        self.nifti_mask = nifti_mask
 
     @property
     def save_memory(self):
