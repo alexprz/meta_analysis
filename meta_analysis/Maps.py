@@ -193,6 +193,7 @@ class Maps:
 
         self._atlas = Atlas(atlas)
         self._maps_atlas = None
+        self._atlas_filter_matrix = None
 
 
         if isinstance(df, pd.DataFrame):
@@ -303,11 +304,10 @@ class Maps:
 
     # @profile
     def _build_atlas_maps(self):
-        if self._atlas.atlas is None:
+        if not self.has_atlas():
             return
 
-        print(self._atlas)
-        print(self._atlas.data)
+        # Building filter matrix
         atlas_data = self.flatten_array(self._atlas.data)
         filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self.n_voxels))
 
@@ -317,7 +317,13 @@ class Maps:
 
         filter_matrix = scipy.sparse.csr_matrix(filter_matrix)
 
-        self._maps_atlas = filter_matrix.dot(self.maps)
+        self._atlas_filter_matrix = filter_matrix
+
+        # Refreshing atlas maps
+        self.refresh_atlas_maps()
+
+    def refresh_atlas_maps(self):
+        self._maps_atlas = self._atlas_filter_matrix.dot(self.maps)
 
     @property
     def save_memory(self):
@@ -348,6 +354,9 @@ class Maps:
 
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
+
+    def has_atlas(self):
+        return self._atlas.atlas is not None
 
     def _get_maps(self, atlas):
         return self._maps_atlas if atlas else self._maps
@@ -571,6 +580,8 @@ class Maps:
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = csr_maps
+        if new_maps.has_atlas():
+            new_maps.refresh_atlas_maps()
         return new_maps
 
     @staticmethod
@@ -633,7 +644,7 @@ class Maps:
 
             Returns a sparse CSR matrix of shape (n_voxels, n_voxels) representing the covariance matrix.
         '''
-        if self._atlas.atlas is None:
+        if not self.has_atlas():
             raise ValueError('No atlas. Must specify an atlas when initializing Maps or specify atlas=False in cov() function.')
 
         if not bias and self.n_maps <= 1:
