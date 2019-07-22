@@ -1,7 +1,7 @@
 '''
     TEST
 '''
-import scipy, copy
+import scipy, copy, nilearn
 import numpy as np
 import nibabel as nib
 import pandas as pd
@@ -134,6 +134,7 @@ class Maps:
                        affine=None,
                        mask=None,
                        nifti_mask=None,
+                       atlas=None,
                        groupby_col=None,
                        x_col='x',
                        y_col='y',
@@ -171,6 +172,9 @@ class Maps:
         self.nifti_mask = nifti_mask
         self.id_to_coord_index = None
         self.coord_to_id_index = None
+
+        self._atlas = atlas
+        self._maps_atlas = None
 
 
         if isinstance(df, pd.DataFrame):
@@ -264,16 +268,35 @@ class Maps:
         self.nifti_mask = nifti_mask
         self.id_to_coord, self.coord_to_id = self.build_index(nifti_mask)
 
-    def build_index(self, nifti_mask):
-        mask_data = self.flatten_array(nifti_mask.get_fdata())
+    # def build_index(self, nifti_mask):
+    #     mask_data = self.flatten_array(nifti_mask.get_fdata())
 
-        nonzero_id = np.nonzero(mask_data)[0]
+    #     nonzero_id = np.nonzero(mask_data)[0]
 
-        id_to_coord_index = {id: self.id_to_coord(id) for id in nonzero_id}
-        coord_to_id_index = {v: k for k, v in id_to_coord_index.items()}
+    #     id_to_coord_index = {id: self.id_to_coord(id) for id in nonzero_id}
+    #     coord_to_id_index = {v: k for k, v in id_to_coord_index.items()}
 
-        return id_to_coord_index, coord_to_id_index
+    #     return id_to_coord_index, coord_to_id_index
 
+    @profile
+    def set_atlas(self, atlas):
+
+        atlas_img = nilearn.image.load_img(atlas['maps'])
+        atlas_data = self.flatten_array(atlas_img.get_fdata())
+
+        labels = atlas['labels']
+        n_labels = len(labels)
+
+        filter_matrix = scipy.sparse.lil_matrix((n_labels, self.n_voxels))
+
+        for k in range(n_labels):
+            row = atlas_data == k
+            filter_matrix[k, row] = 1
+
+        filter_matrix = scipy.sparse.csr_matrix(filter_matrix)
+
+        self._maps_atlas = filter_matrix.dot(self.maps)
+        self._atlas = atlas
 
     @property
     def save_memory(self):
@@ -304,6 +327,7 @@ class Maps:
 
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
+
 
     def _set_dense_maps(self):
         if self._maps is None:
