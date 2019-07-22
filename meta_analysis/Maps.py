@@ -1,7 +1,7 @@
 '''
     TEST
 '''
-import scipy, copy
+import scipy, copy, nilearn
 import numpy as np
 import nibabel as nib
 import pandas as pd
@@ -127,12 +127,32 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, reduce=1, mask=None):
     
     return maps, Ni_r, Nj_r, Nk_r, affine_r
 
+class Atlas:
+    def __init__(self, atlas):
+        self.atlas = None
+        self.atlas_img = None
+        self.data = None
+        self.labels = None
+        self.n_labels = None
+
+        if atlas is None:
+            return
+
+        self.atlas = atlas
+        self.atlas_img = nilearn.image.load_img(atlas['maps'])
+        self.data = self.atlas_img.get_fdata()
+        self.labels = atlas['labels']
+        self.n_labels = len(self.labels)
+
+
 class Maps:
     def __init__(self, df=None,
                        reduce=1,
                        Ni=None, Nj=None, Nk=None,
                        affine=None,
                        mask=None,
+                       nifti_mask=None,
+                       atlas=None,
                        groupby_col=None,
                        x_col='x',
                        y_col='y',
@@ -165,6 +185,16 @@ class Maps:
         self.mask = mask
         self._save_memory = save_memory
         self._maps_dense =  None
+
+
+        self.nifti_mask = nifti_mask
+        self.id_to_coord_index = None
+        self.coord_to_id_index = None
+
+        self._atlas = Atlas(atlas)
+        self._maps_atlas = None
+        self._atlas_filter_matrix = None
+
 
         if isinstance(df, pd.DataFrame):
             if groupby_col == None:
@@ -199,6 +229,8 @@ class Maps:
         else:
             raise ValueError('First argument not understood. Must be pandas df, int or length 2 tuple.')
 
+        self._build_atlas_maps()
+
 
     @classmethod
     def zeros(cls, shape, **kwargs):
@@ -210,6 +242,7 @@ class Maps:
         self.Nk = other.Nk
         self.affine = other.affine
         self._save_memory = other._save_memory
+        self._atlas = other._atlas
 
         return self
 
@@ -232,8 +265,65 @@ class Maps:
         string += 'N pmids : {}\n'
         string += 'Box size : ({}, {}, {})\n'
         string += 'Affine :\n{}\n'
+        string += 'Has atlas : {}\n'
         string += 'Map : \n{}\n'
-        return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self.Ni, self.Nj, self.Nk, self.affine, self.maps)
+        string += 'Atlas Map : \n{}\n'
+        return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self.Ni, self.Nj, self.Nk, self.affine, self._atlas is not None, self.maps, self._maps_atlas)
+
+    def coord_to_id(self, i, j, k):
+        return np.ravel_multi_index((i, j, k), (self.Ni, self.Nj, self.Nk), order='F')
+
+    def id_to_coord(self, id):
+        return np.unravel_index(id, (self.Ni, self.Nj, self.Nk), order='F')
+
+    def flatten_array(self, array):
+        return array.reshape(-1, order='F')
+
+    def unflatten_array(self, array):
+        return array.reshape((self.Ni, self.Nj, self.Nk), order='F')
+
+    def apply_mask(self, nifti_mask):
+
+        mask_data = self.flatten_array(nifti_mask.get_fdata())
+
+        filter_matrix = scipy.sparse.diags(mask_data, format='csr')
+
+        self.maps = filter_matrix.dot(self.maps)
+        self.nifti_mask = nifti_mask
+        self.id_to_coord, self.coord_to_id = self.build_index(nifti_mask)
+
+    # def build_index(self, nifti_mask):
+    #     mask_data = self.flatten_array(nifti_mask.get_fdata())
+
+    #     nonzero_id = np.nonzero(mask_data)[0]
+
+    #     id_to_coord_index = {id: self.id_to_coord(id) for id in nonzero_id}
+    #     coord_to_id_index = {v: k for k, v in id_to_coord_index.items()}
+
+    #     return id_to_coord_index, coord_to_id_index
+
+    # @profile
+    def _build_atlas_maps(self):
+        if not self.has_atlas():
+            return
+
+        # Building filter matrix
+        atlas_data = self.flatten_array(self._atlas.data)
+        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self.n_voxels))
+
+        for k in range(self._atlas.n_labels):
+            row = atlas_data == k
+            filter_matrix[k, row] = 1
+
+        filter_matrix = scipy.sparse.csr_matrix(filter_matrix)
+
+        self._atlas_filter_matrix = filter_matrix
+
+        # Refreshing atlas maps
+        self.refresh_atlas_maps()
+
+    def refresh_atlas_maps(self):
+        self._maps_atlas = self._atlas_filter_matrix.dot(self.maps)
 
     @property
     def save_memory(self):
@@ -264,6 +354,20 @@ class Maps:
 
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
+
+    def has_atlas(self):
+        return self._atlas.atlas is not None
+
+    def _get_maps(self, atlas):
+        return self._maps_atlas if atlas else self._maps
+
+    # @property
+    # def atlas(self):
+    #     return self._atlas
+
+    # @atlas.setter
+    # def atlas(self, atlas):
+    #     self._set_atlas(atlas)
 
     def _set_dense_maps(self):
         if self._maps is None:
@@ -381,18 +485,38 @@ class Maps:
 
         return self.map_to_img(self._maps[:, 0], self.Ni, self.Nj, self.Nk, self.affine)
 
-    def n_peaks(self):
+    def to_data_atlas(self, map_id=0, ignore_bg=True):
+        if self._atlas is None:
+            raise ValueError('No atlas were given.')
+
+        n_labels = self._atlas.n_labels
+        data_atlas = self._atlas.data
+        data = np.zeros((self.Ni, self.Nj, self.Nk))
+        start = 1 if ignore_bg else 0
+
+        for k in range(start, n_labels):
+            data[data_atlas == k] = self._maps_atlas[k, map_id]
+
+        return data
+
+    def to_img_atlas(self, map_id=0, ignore_bg=True):
+        return self.data_to_img(self.to_data_atlas(map_id=map_id, ignore_bg=ignore_bg), self.affine)
+
+    def n_peaks(self, atlas=False):
         '''
             Returns a numpy array containing the number of peaks in each maps
         '''
-        e = scipy.sparse.csr_matrix(np.ones(self.n_voxels))
-        return np.array(e.dot(self._maps).toarray()[0])
+        maps = self._get_maps(atlas=atlas)
 
-    def max(self):
+        e = scipy.sparse.csr_matrix(np.ones(maps.shape[0]))
+        return np.array(e.dot(maps).toarray()[0])
+
+    def max(self, atlas=False):
         '''
             Maximum element wise
         '''
-        return self.maps.max()
+        maps = self._get_maps(atlas=atlas)
+        return maps.max()
 
     def summed_map(self):
         '''
@@ -407,20 +531,24 @@ class Maps:
         sum_map = Maps()
         sum_map.copy_header(self)
         sum_map.maps = scipy.sparse.csr_matrix(self.sum(axis=1))
+        sum_map._maps_atlas = scipy.sparse.csr_matrix(self.sum(atlas=True, axis=1))
 
         return sum_map
 
-    def sum(self, **kwargs):
-        return self.maps.sum(**kwargs)
+    def sum(self, atlas=False, **kwargs):
+        maps = self._get_maps(atlas=atlas)
+        return maps.sum(**kwargs)
 
     def normalize(self, inplace=False):
         '''
             Normalize each maps separatly so that each maps sums to 1.
         '''
-        diag = scipy.sparse.diags(np.power(self.n_peaks(), -1))
+        diag = scipy.sparse.diags(np.power(self.n_peaks(atlas=False), -1))
+        diag_atlas = scipy.sparse.diags(np.power(self.n_peaks(atlas=True), -1))
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = self._maps.dot(diag)
+        new_maps.maps_atlas = self._maps_atlas.dot(diag_atlas)
         return new_maps
 
     @staticmethod
@@ -452,6 +580,8 @@ class Maps:
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = csr_maps
+        if new_maps.has_atlas():
+            new_maps.refresh_atlas_maps()
         return new_maps
 
     @staticmethod
@@ -474,6 +604,7 @@ class Maps:
         avg_map = Maps()
         avg_map.copy_header(self)
         avg_map.maps = self.average(self.maps)
+        avg_map._maps_atlas = self.average(self._maps_atlas)
 
         return avg_map
 
@@ -504,34 +635,49 @@ class Maps:
         var_map = Maps()
         var_map.copy_header(self)
         var_map.maps = self.variance(self._maps, bias=bias)
+        var_map._maps_atlas = self.variance(self._maps_atlas, bias=bias)
         return var_map
 
-    def cov(self, bias=False, shrink=None):
+    def cov(self, atlas=True, bias=False, shrink=None, sparse=False, ignore_bg=True):
         '''
             Builds the empirical unbiased covariance matrix of the given maps on the second axis.
 
             Returns a sparse CSR matrix of shape (n_voxels, n_voxels) representing the covariance matrix.
         '''
+        if not self.has_atlas():
+            raise ValueError('No atlas. Must specify an atlas when initializing Maps or specify atlas=False in cov() function.')
+
         if not bias and self.n_maps <= 1:
             raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self.n_maps))
 
+        maps = self._get_maps(atlas=atlas)
         ddof = 0 if bias else 1
+
+        if atlas:
+            labels = self._atlas.labels
+            if ignore_bg:
+                maps[0, :] = 0
+                labels = labels[1:]
+
 
         e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose()
         e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose()
 
-        M1 = self._maps.dot(e1)
-        M2 = self._maps.dot(e2)
-        M3 = self._maps.dot(self._maps.transpose())/((self.n_maps-ddof))
+        M1 = maps.dot(e1)
+        M2 = maps.dot(e2)
+        M3 = maps.dot(maps.transpose())/((self.n_maps-ddof))
 
         # Empirical covariance matrix
         S =  M3 - M1.dot(M2.transpose())
 
-        if shrink is None:
-            return S
+        if not sparse:
+            S = S.toarray()
 
-        elif shrink == 'LW':
-            return LedoitWolf().fit(S.toarray()).covariance_
+        if shrink == 'LW':
+            S = LedoitWolf().fit(S.toarray()).covariance_
+
+        return S, labels if atlas else S
+
 
     def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
