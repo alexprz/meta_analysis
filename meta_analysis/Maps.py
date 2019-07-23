@@ -147,7 +147,6 @@ class Maps:
 
         Args:
             df (pandas.DataFrame): Pandas DataFrame containing the (x,y,z) coordinates, the weights and the map id. The names of the columns can be specified.
-            reduce (int): Reducing factor of the map resolution (e.g. if reduce=2, voxels are 2 times larger in every directions).
             Ni (int): X size of the bounding box.
             Nj (int): Y size of the bounding box.
             Nk (int): Z size of the bounding box.
@@ -353,7 +352,7 @@ class Maps:
 
     #_____________DATA_TRANSFORMERS_____________#
     @staticmethod
-    def map_to_data(map, Ni, Nj, Nk):
+    def map_to_array(map, Ni, Nj, Nk):
         '''
             Convert a sparse matrix of shape (n_voxels, 1) into a dense 3D numpy array of shape (Ni, Nj, Nk).
 
@@ -367,15 +366,15 @@ class Maps:
         return map.toarray().reshape((Ni, Nj, Nk), order='F')
 
     @staticmethod
-    def data_to_map(data):
-        return scipy.sparse.csr_matrix(data.reshape((-1, 1), order='F'))
+    def array_to_map(array):
+        return scipy.sparse.csr_matrix(array.reshape((-1, 1), order='F'))
 
     @staticmethod
-    def data_to_img(data, affine):
+    def array_to_img(array, affine):
         '''
-            Convert a dense 3D data array into a nibabel Nifti1Image.
+            Convert a dense 3D array into a nibabel Nifti1Image.
         '''
-        return nib.Nifti1Image(data, affine)
+        return nib.Nifti1Image(array, affine)
 
     @staticmethod
     def map_to_img(map, Ni, Nj, Nk, affine):
@@ -384,9 +383,9 @@ class Maps:
 
             Ni, Nj, Nk are the size of the box used to index the flattened map matrix.
         '''
-        return Maps.data_to_img(Maps.map_to_data(map, Ni, Nj, Nk), affine)
+        return Maps.array_to_img(Maps.map_to_array(map, Ni, Nj, Nk), affine)
 
-    def to_data(self, map_id=None):
+    def to_array(self, map_id=None):
         '''
             Convert one map into a 3D numpy.ndarray.
 
@@ -401,12 +400,12 @@ class Maps:
                 KeyError: If map_id is None and the instance contains more than one map. 
         '''
         if map_id is not None:
-            return self.map_to_data(self._maps[:, map_id], self._Ni, self._Nj, self._Nk)
+            return self.map_to_array(self._maps[:, map_id], self._Ni, self._Nj, self._Nk)
 
         if self._n_maps > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to data.'.format(self._n_maps))
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to array.'.format(self._n_maps))
 
-        return self.map_to_data(self._maps[:, 0], self._Ni, self._Nj, self._Nk)
+        return self.map_to_array(self._maps[:, 0], self._Ni, self._Nj, self._Nk)
 
     def to_img(self, map_id=None):
         '''
@@ -430,7 +429,7 @@ class Maps:
 
         return self.map_to_img(self._maps[:, 0], self._Ni, self._Nj, self._Nk, self._affine)
 
-    def to_data_atlas(self, map_id=None, ignore_bg=True):
+    def to_array_atlas(self, map_id=None, ignore_bg=True):
         '''
             Convert one atlas map into a 3D numpy.array.
 
@@ -443,24 +442,24 @@ class Maps:
                 (numpy.ndarray) 3D array containing the chosen atlas map information.
 
             Raises:
-                AttributeError: If no atlas as been given to this instance.
+                AttributeError: If no atlas has been given to this instance.
                 KeyError: If map_id is None and the instance contains more than one map. 
         '''
         if not self._has_atlas():
             raise AttributeError('No atlas were given.')
 
         if map_id is None and self._n_maps > 1:
-            raise KeyError('This Maps object contains atlas {} maps, specify which map to convert to data.'.format(self._n_maps))
+            raise KeyError('This Maps object contains atlas {} maps, specify which map to convert to array.'.format(self._n_maps))
         elif map_id is None:
             map_id = 0
 
-        data = np.zeros((self._Ni, self._Nj, self._Nk))
+        array = np.zeros((self._Ni, self._Nj, self._Nk))
         start = 1 if ignore_bg else 0
 
         for k in range(start, self._atlas.n_labels):
-            data[self._atlas.data == k] = self._maps_atlas[k, map_id]
+            array[self._atlas.data == k] = self._maps_atlas[k, map_id]
 
-        return data
+        return array
 
     def to_img_atlas(self, map_id=0, ignore_bg=True):
         '''
@@ -478,7 +477,7 @@ class Maps:
                 AttributeError: If no atlas as been given to this instance.
                 KeyError: If map_id is None and the instance contains more than one map. 
         '''
-        return self.data_to_img(self.to_data_atlas(map_id=map_id, ignore_bg=ignore_bg), self._affine)
+        return self.array_to_img(self.to_array_atlas(map_id=map_id, ignore_bg=ignore_bg), self._affine)
 
     #_____________PUBLIC_TOOLS_____________#
     def apply_mask(self, mask):
@@ -486,10 +485,10 @@ class Maps:
             Set the contribution of every voxels outside the mask to zero.
 
             Args:
-                mask (nibabel.Nifti1Image): Nifti1Image with 0 or 1 data. 0: outside the mask, 1: inside.
+                mask (nibabel.Nifti1Image): Nifti1Image with 0 or 1 array. 0: outside the mask, 1: inside.
         '''
-        mask_data = self._flatten_array(mask.get_fdata())
-        filter_matrix = scipy.sparse.diags(mask_data, format='csr')
+        mask_array = self._flatten_array(mask.get_fdata())
+        filter_matrix = scipy.sparse.diags(mask_array, format='csr')
 
         self.maps = filter_matrix.dot(self.maps)
         self._mask = mask
@@ -576,15 +575,15 @@ class Maps:
         return new_maps
 
     @staticmethod
-    def _smooth_data(data, sigma):
-        return gaussian_filter(data, sigma=sigma)
+    def _smooth_array(array, sigma):
+        return gaussian_filter(array, sigma=sigma)
 
     @staticmethod
     def _smooth_map(map, sigma, Ni, Nj, Nk):
-        data = Maps.map_to_data(map, Ni, Nj, Nk)
-        data = self._smooth_data(data, sigma=sigma)
-        data_reshaped = data.reshape((-1, 1), order='F')
-        map = scipy.sparse.csr_matrix(data_reshaped)
+        array = Maps.map_to_array(map, Ni, Nj, Nk)
+        array = self._smooth_array(array, sigma=sigma)
+        array_reshaped = array.reshape((-1, 1), order='F')
+        map = scipy.sparse.csr_matrix(array_reshaped)
         return map
 
     def smooth(self, sigma, map_id=None, inplace=False, verbose=False):
@@ -607,9 +606,9 @@ class Maps:
 
         for k in map_ids:
             if verbose: print('Smoothing {} out of {}.'.format(k+1, self._n_maps))
-            data = self.to_data(k)
-            data = self._smooth_data(data, sigma=sigma)
-            lil_maps[:, k] = data.reshape((-1, 1), order='F')
+            array = self.to_array(k)
+            array = self._smooth_array(array, sigma=sigma)
+            lil_maps[:, k] = array.reshape((-1, 1), order='F')
 
         csr_maps = scipy.sparse.csr_matrix(lil_maps)
 
@@ -744,7 +743,7 @@ class Maps:
         '''
             Computes the empirical covariance matrix of the voxels, the observations being the different maps.
             Important : Considering covariance between atlas' labels (atlas=True) instead of voxels is highly recommended
-                since the number of voxels is often huge (~1 million), the covariance matrix would be of big shape (1 million, ~~1 million) and the computation will probably not finish.
+            since the number of voxels is often huge (~1 million), the covariance matrix would be of big shape (1 million, ~1 million) and the computation will probably not finish.
 
             Args:
                 atlas (bool, optional): If True, consider covariance between atlas' labels. If False, covariance between voxels. Default is True (recommended).
@@ -754,7 +753,7 @@ class Maps:
                 ignore_bg(bool, optional): If True, ignore the first label of the atlas (background).
 
             Returns:
-                (numpy.ndarray or scipy.sparse.csr_matrix) 1 2D matrix (sparse or dense depending on sparse parameter) of shape (n_voxels, n_voxels) representing the covariance matrix.
+                (numpy.ndarray or scipy.sparse.csr_matrix) A 2D matrix (sparse or dense depending on sparse parameter) of shape (n_voxels, n_voxels) representing the covariance matrix.
         '''
         if not self._has_atlas():
             raise ValueError('No atlas. Must specify an atlas when initializing Maps or specify atlas=False in cov() function.')
@@ -805,7 +804,7 @@ class Maps:
                 if self.save_memory:
                     current_map = self._smooth_map(current_map, sigma, self._Ni, self._Nj, self._Nk)
                 else:
-                    current_map = self._smooth_data(current_map, sigma)
+                    current_map = self._smooth_array(current_map, sigma)
 
         avg_map_n = copy.copy(current_map)
         var_map_n = Maps.zeros(self._n_voxels).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
@@ -820,7 +819,7 @@ class Maps:
                 if self.save_memory:
                     current_map = self._smooth_map(current_map, sigma, self._Ni, self._Nj, self._Nk)
                 else:
-                    current_map = self._smooth_data(current_map, sigma)
+                    current_map = self._smooth_array(current_map, sigma)
 
             avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
 
@@ -839,8 +838,8 @@ class Maps:
         avg = Maps()._copy_header(self)
         var = Maps()._copy_header(self)
 
-        avg.maps = avg_map_n if self.save_memory else self.data_to_map(avg_map_n)
-        var.maps = var_map_n if self.save_memory else self.data_to_map(var_map_n)
+        avg.maps = avg_map_n if self.save_memory else self.array_to_map(avg_map_n)
+        var.maps = var_map_n if self.save_memory else self.array_to_map(var_map_n)
 
         if verbose:
             print('Iterative smooth avg var {} out of {}... Done'.format(self._n_maps, self._n_maps))
