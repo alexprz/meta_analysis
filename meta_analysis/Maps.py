@@ -281,17 +281,22 @@ class Maps:
     def id_to_coord(id, Ni, Nj, Nk):
         return np.unravel_index(id, (Ni, Nj, Nk), order='F')
 
+    @staticmethod
+    def unflatten_array(self, array, Ni, Nj, Nk):
+        return array.reshape((Ni, Nj, Nk), order='F')
+
     def _coord_to_id(self, i, j, k):
         return self.coord_to_id(i, j, k, self._Ni, self._Nj, self._Nk)
 
     def _id_to_coord(self, id):
         return self.id_to_coord(id, self._Ni, self._Nj, self._Nk)
 
-    def _flatten_array(self, array):
-        return array.reshape(-1, order='F')
+    def _flatten_array(self, array, _2D=False):
+        shape = (-1, 1) if _2D else -1
+        return array.reshape(shape, order='F')
 
     def _unflatten_array(self, array):
-        return array.reshape((self._Ni, self._Nj, self._Nk), order='F')
+        return self.unflatten_array(array, self._Ni, self._Nj, self._Nk)
 
     def _build_atlas_filter_matrix(self):
         if not self._has_atlas():
@@ -366,11 +371,11 @@ class Maps:
         if n_voxels != Ni*Nj*Nk:
             raise ValueError('Map\'s length ({}) does not match given box ({}, {}, {}) of size {}.'.format(n_voxels, Ni, Nj, Nk, Ni*Nj*Nk))
 
-        return map.toarray().reshape((Ni, Nj, Nk), order='F')
+        return Maps.unflatten_array(map.toarray(), Ni, Nj, Nk)
 
     @staticmethod
     def array_to_map(array):
-        return scipy.sparse.csr_matrix(array.reshape((-1, 1), order='F'))
+        return scipy.sparse.csr_matrix(Maps._flatten_array(array, _2D=True))
 
     @staticmethod
     def array_to_img(array, affine):
@@ -530,7 +535,7 @@ class Maps:
         elif isinstance(p, np.ndarray):
             if p.shape != (self._Ni, self._Nj, self._Nk):
                 raise ValueError('Invalid numpy array to serve as a distribution. Should be of shape ({}, {}, {}).'.format(self._Ni, self._Nj, self._Nk))
-            p = p.reshape(-1, order='F')
+            p = self._flatten_array(p)
 
         else:
             raise ValueError('Invalid distribution p. Must be either None, Maps object or numpy.ndarray.')
@@ -588,8 +593,7 @@ class Maps:
     def _smooth_map(map, sigma, Ni, Nj, Nk):
         array = Maps.map_to_array(map, Ni, Nj, Nk)
         array = self._smooth_array(array, sigma=sigma)
-        array_reshaped = array.reshape((-1, 1), order='F')
-        map = scipy.sparse.csr_matrix(array_reshaped)
+        map = Maps.array_to_map(array)
         return map
 
     def smooth(self, sigma, map_id=None, inplace=False, verbose=False):
@@ -614,7 +618,7 @@ class Maps:
             if verbose: print('Smoothing {} out of {}.'.format(k+1, self._n_maps))
             array = self.to_array(k)
             array = self._smooth_array(array, sigma=sigma)
-            lil_maps[:, k] = array.reshape((-1, 1), order='F')
+            lil_maps[:, k] = self._flatten_array(array, _2D=True)
 
         csr_maps = scipy.sparse.csr_matrix(lil_maps)
 
