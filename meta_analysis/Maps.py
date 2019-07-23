@@ -245,8 +245,25 @@ class Maps:
 
     #_____________CLASS_METHODS_____________#
     @classmethod
-    def zeros(cls, shape, **kwargs):
-        return cls(df=shape, **kwargs)
+    def zeros(cls, n_voxels, n_maps=1, **kwargs):
+        '''
+            Create empty maps of the given shape.
+            See the Maps.__init__ doc for **kwargs parameters.
+        '''
+        return cls(df=(n_voxels, n_maps), **kwargs)
+
+    @classmethod
+    def random(cls, Ni, Nj, Nk, n_peaks, n_maps, mask=None, atlas=None, p=None):
+        '''
+            Create the given number of maps and sample peaks on them. 
+
+            See the Maps.__init__ doc for Ni, Nj, Nk, mask, atlas parameters.
+            See the Maps.randomize doc for n_peaks, n_maps, p parameters.
+        '''
+        maps = cls(df=None, Ni=Ni, Nj=Nj, Nk=Nk, atlas=atlas)
+        maps._mask = mask
+
+        return maps.randomize(n_peaks, n_maps, p=p, use_mask=(mask is not None), inplace=True)
 
     #_____________PRIVATE_TOOLS_____________#
     def _copy_header(self, other):
