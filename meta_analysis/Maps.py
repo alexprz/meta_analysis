@@ -130,11 +130,9 @@ class Atlas:
 
 class Maps:
     def __init__(self, df=None,
-                       reduce=1,
                        Ni=None, Nj=None, Nk=None,
                        affine=None,
                        mask=None,
-                       nifti_mask=None,
                        atlas=None,
                        groupby_col=None,
                        x_col='x',
@@ -154,7 +152,8 @@ class Maps:
             Nj (int): Y size of the bounding box.
             Nk (int): Z size of the bounding box.
             affine (numpy.ndarray): Array with shape (4, 4) storing the affine used to compute brain voxels coordinates from world cooridnates.
-            mask (numpy.ndarray): Boolean array with shape (Ni, Nj, Nk). If mask[i, j, k] = False, ignore all (x,y,z) coordinates which have their voxels coordinates equal to (i, j, k).
+            mask (nibabel.Nifti1Image): Nifti1Image with 0 or 1 data.
+            atlas (Object): Object containing a nibabel.Nifti1Image or a path to it in atlas['maps'] and a list of the labels in atlas['labels']
             groupby_col (str): Name of the column on which the groupby operation is operated. Or in an equivalent way, the name of the column storing the ids of the maps.
             x_col (str): Name of the column storing the x coordinates.
             y_col (str): Name of the column storing the y coordinates.
@@ -162,24 +161,20 @@ class Maps:
             weight_col (str): Name of the column storing the weights. 
         '''
 
-        self.Ni = Ni
-        self.Nj = Nj
-        self.Nk = Nk
-        self.affine = affine
-        self.mask = mask
+        self._Ni = Ni
+        self._Nj = Nj
+        self._Nk = Nk
+        self._affine = affine
         self._save_memory = save_memory
-        self._maps_dense =  None
-
-
-        self.nifti_mask = nifti_mask
-        self.id_to_coord_index = None
-        self.coord_to_id_index = None
-
+        self._mask = mask
+        self._maps = None
+        self._n_voxels, self._n_maps = 0, 0
         self._atlas = Atlas(atlas)
+        self._maps_dense =  None
         self._maps_atlas = None
         self._atlas_filter_matrix = None
 
-
+        # Build maps
         if isinstance(df, pd.DataFrame):
             if groupby_col == None:
                 raise ValueError('Must specify column name to group by maps.')
@@ -195,25 +190,26 @@ class Maps:
                 'weight': weight_col
             }
 
-            self.maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=nifti_mask, verbose=verbose)
-            self.n_voxels, self.n_maps = self._maps.shape
+            self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, verbose)
 
         elif isinstance(df, tuple):
-            self.maps = scipy.sparse.csr_matrix(df)
-            self.n_voxels, self.n_maps = self._maps.shape
+            self._maps = scipy.sparse.csr_matrix(df)
 
         elif isinstance(df, int):
-            self.maps = scipy.sparse.csr_matrix((df, 1))
-            self.n_voxels, self.n_maps = self._maps.shape
+            self._maps = scipy.sparse.csr_matrix((df, 1))
 
         elif df is None:
             self._maps = None
-            self.n_voxels, self.n_maps = 0, 0
 
         else:
             raise ValueError('First argument not understood. Must be pandas df, int or length 2 tuple.')
 
-        self._build_atlas_maps()
+        # Refresh infos according to new map
+        if self._maps is not None:
+            self._n_voxels, self._n_maps = self._maps.shape
+
+        self._build_atlas_filter_matrix()
+        self._refresh_atlas_maps()
 
 
     @classmethod
@@ -221,25 +217,27 @@ class Maps:
         return cls(df=shape, **kwargs)
 
     def copy_header(self, other):
-        self.Ni = other.Ni
-        self.Nj = other.Nj
-        self.Nk = other.Nk
-        self.affine = other.affine
+        self._Ni = other._Ni
+        self._Nj = other._Nj
+        self._Nk = other._Nk
+        self._affine = other._affine
+        self._mask = other._mask
         self._save_memory = other._save_memory
         self._atlas = other._atlas
 
         return self
 
-    def has_same_header(self, other):
-        if self.n_voxels != other.n_voxels or \
-           self.n_maps != other.n_maps or \
-           self.Ni != other.Ni or \
-           self.Nj != other.Nj or \
-           self.Nk != other.Nk or \
-           np.array_equal(self.affine, other.affine):
-            return False
+    # def has_same_header(self, other):
+    #     if self._n_voxels != other.n_voxels or \
+    #        self._n_maps != other.n_maps or \
+    #        self._Ni != other._Ni or \
+    #        self._Nj != other._Nj or \
+    #        self._Nk != other._Nk or \
+    #        not np.array_equal(self._affine, other._affine) or \
+    #        not np.array_equal(self.mask, other.mask):
+    #         return False
 
-        return True
+    #     return True
 
     def __str__(self):
         string = '\nMaps object containing {} maps.\n'
@@ -252,7 +250,7 @@ class Maps:
         string += 'Has atlas : {}\n'
         string += 'Map : \n{}\n'
         string += 'Atlas Map : \n{}\n'
-        return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self.Ni, self.Nj, self.Nk, self.affine, self._atlas is not None, self.maps, self._maps_atlas)
+        return string.format(self._n_maps, self.maps.count_nonzero(), self._n_voxels, self._n_maps, self._Ni, self._Nj, self._Nk, self._affine, self.has_atlas(), self.maps, self._maps_atlas)
 
     @staticmethod
     def coord_to_id(i, j, k, Ni, Nj, Nk):
@@ -263,58 +261,46 @@ class Maps:
         return np.unravel_index(id, (Ni, Nj, Nk), order='F')
 
     def _coord_to_id(self, i, j, k):
-        return np.ravel_multi_index((i, j, k), (self.Ni, self.Nj, self.Nk), order='F')
+        return np.ravel_multi_index((i, j, k), (self._Ni, self._Nj, self._Nk), order='F')
 
     def _id_to_coord(self, id):
-        return np.unravel_index(id, (self.Ni, self.Nj, self.Nk), order='F')
+        return np.unravel_index(id, (self._Ni, self._Nj, self._Nk), order='F')
 
     def flatten_array(self, array):
         return array.reshape(-1, order='F')
 
     def unflatten_array(self, array):
-        return array.reshape((self.Ni, self.Nj, self.Nk), order='F')
+        return array.reshape((self._Ni, self._Nj, self._Nk), order='F')
 
-    def apply_mask(self, nifti_mask):
+    def apply_mask(self, mask):
 
-        mask_data = self.flatten_array(nifti_mask.get_fdata())
+        mask_data = self.flatten_array(mask.get_fdata())
 
         filter_matrix = scipy.sparse.diags(mask_data, format='csr')
 
         self.maps = filter_matrix.dot(self.maps)
-        self.nifti_mask = nifti_mask
-        # self.id_to_coord, self.coord_to_id = self.build_index(nifti_mask)
+        self._mask = mask
 
-    # def build_index(self, nifti_mask):
-    #     mask_data = self.flatten_array(nifti_mask.get_fdata())
-
-    #     nonzero_id = np.nonzero(mask_data)[0]
-
-    #     id_to_coord_index = {id: self.id_to_coord(id) for id in nonzero_id}
-    #     coord_to_id_index = {v: k for k, v in id_to_coord_index.items()}
-
-    #     return id_to_coord_index, coord_to_id_index
-
-    # @profile
-    def _build_atlas_maps(self):
+    def _build_atlas_filter_matrix(self):
         if not self.has_atlas():
             return
 
-        # Building filter matrix
         atlas_data = self.flatten_array(self._atlas.data)
-        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self.n_voxels))
+        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self._n_voxels))
 
         for k in range(self._atlas.n_labels):
             row = atlas_data == k
             filter_matrix[k, row] = 1
 
-        filter_matrix = scipy.sparse.csr_matrix(filter_matrix)
+        return scipy.sparse.csr_matrix(filter_matrix)
 
-        self._atlas_filter_matrix = filter_matrix
+    def _refresh_atlas_maps(self):
+        if not self.has_atlas():
+            return
 
-        # Refreshing atlas maps
-        self.refresh_atlas_maps()
+        if self._atlas_filter_matrix is None:
+            self._atlas_filter_matrix = self._build_atlas_filter_matrix()
 
-    def refresh_atlas_maps(self):
         self._maps_atlas = self._atlas_filter_matrix.dot(self.maps)
 
     @property
@@ -337,12 +323,13 @@ class Maps:
     @maps.setter
     def maps(self, maps):
         if maps is None:
-            self.n_voxels, self.n_maps = 0, 0
+            self._n_voxels, self._n_maps = 0, 0
 
         else:
-            self.n_voxels, self.n_maps = maps.shape
+            self._n_voxels, self._n_maps = maps.shape
 
         self._maps = maps
+        self._refresh_atlas_maps()
 
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
@@ -365,27 +352,27 @@ class Maps:
         if self._maps is None:
             self._maps_dense = None
         else:
-            self._maps_dense = self._maps.toarray().reshape((self.Ni, self.Nj, self.Nk, self.n_maps), order='F')
+            self._maps_dense = self._maps.toarray().reshape((self._Ni, self._Nj, self._Nk, self._n_maps), order='F')
 
-    @property
-    def mask(self):
-        if self._maps is None:
-            return None
+    # @property
+    # def mask(self):
+    #     if self._maps is None:
+    #         return None
 
-        return self._maps.reshape((Ni, Nj, Nk), order='F')
+    #     return self._maps.reshape((Ni, Nj, Nk), order='F')
 
-    @mask.setter
-    def mask(self, mask):
-        if mask is None:
-            self._mask = None
-        else:
-            self._mask = mask.reshape(-1, order='F')
+    # @mask.setter
+    # def mask(self, mask):
+    #     if mask is None:
+    #         self._mask = None
+    #     else:
+    #         self._mask = mask.reshape(-1, order='F')
 
     def randomize(self, n_peaks, n_maps, inplace=False, p=None, mask=None):
-        if self.Ni is None or self.Nj is None or self.Nk is None:
+        if self._Ni is None or self._Nj is None or self._Nk is None:
             raise ValueError('Invalid box size ({}, {}, {}).'.format(Ni, Nj, Nk))
 
-        n_voxels = self.Ni*self.Nj*self.Nk
+        n_voxels = self._Ni*self._Nj*self._Nk
 
         if p is None:
             p = np.ones(n_voxels)/n_voxels
@@ -396,8 +383,8 @@ class Maps:
             p = p.maps.transpose().toarray()[0]
 
         elif isinstance(p, np.ndarray):
-            if p.shape != (self.Ni, self.Nj, self.Nk):
-                raise ValueError('Invalid numpy array to serve as a distribution. Should be of shape ({}, {}, {}).'.format(self.Ni, self.Nj, self.Nk))
+            if p.shape != (self._Ni, self._Nj, self._Nk):
+                raise ValueError('Invalid numpy array to serve as a distribution. Should be of shape ({}, {}, {}).'.format(self._Ni, self._Nj, self._Nk))
             p = p.reshape(-1, order='F')
 
         # else:
@@ -441,12 +428,12 @@ class Maps:
 
     def to_data(self, map_id=None):
         if map_id!=None:
-            return self.map_to_data(self._maps[:, map_id], self.Ni, self.Nj, self.Nk)
+            return self.map_to_data(self._maps[:, map_id], self._Ni, self._Nj, self._Nk)
 
-        if self.n_maps > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to data.'.format(self.n_maps))
+        if self._n_maps > 1:
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to data.'.format(self._n_maps))
 
-        return self.map_to_data(self._maps[:, 0], self.Ni, self.Nj, self.Nk)
+        return self.map_to_data(self._maps[:, 0], self._Ni, self._Nj, self._Nk)
 
     @staticmethod
     def data_to_map(data):
@@ -470,12 +457,12 @@ class Maps:
 
     def to_img(self, map_id=None):
         if map_id!=None:
-            return self.map_to_img(self._maps[:, map_id], self.Ni, self.Nj, self.Nk, self.affine)
+            return self.map_to_img(self._maps[:, map_id], self._Ni, self._Nj, self._Nk, self._affine)
 
-        if self.n_maps > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self.n_maps))
+        if self._n_maps > 1:
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self._n_maps))
 
-        return self.map_to_img(self._maps[:, 0], self.Ni, self.Nj, self.Nk, self.affine)
+        return self.map_to_img(self._maps[:, 0], self._Ni, self._Nj, self._Nk, self._affine)
 
     def to_data_atlas(self, map_id=0, ignore_bg=True):
         if self._atlas is None:
@@ -483,7 +470,7 @@ class Maps:
 
         n_labels = self._atlas.n_labels
         data_atlas = self._atlas.data
-        data = np.zeros((self.Ni, self.Nj, self.Nk))
+        data = np.zeros((self._Ni, self._Nj, self._Nk))
         start = 1 if ignore_bg else 0
 
         for k in range(start, n_labels):
@@ -492,7 +479,7 @@ class Maps:
         return data
 
     def to_img_atlas(self, map_id=0, ignore_bg=True):
-        return self.data_to_img(self.to_data_atlas(map_id=map_id, ignore_bg=ignore_bg), self.affine)
+        return self.data_to_img(self.to_data_atlas(map_id=map_id, ignore_bg=ignore_bg), self._affine)
 
     def n_peaks(self, atlas=False):
         '''
@@ -562,8 +549,8 @@ class Maps:
 
         lil_maps = scipy.sparse.lil_matrix(self.maps)
 
-        for k in range(self.n_maps):
-            if verbose: print('Smoothing {} out of {}.'.format(k+1, self.n_maps))
+        for k in range(self._n_maps):
+            if verbose: print('Smoothing {} out of {}.'.format(k+1, self._n_maps))
             data = self.to_data(k)
             data = gaussian_filter(data, sigma=sigma)
             lil_maps[:, k] = data.reshape((-1, 1), order='F')
@@ -639,8 +626,8 @@ class Maps:
         if not self.has_atlas():
             raise ValueError('No atlas. Must specify an atlas when initializing Maps or specify atlas=False in cov() function.')
 
-        if not bias and self.n_maps <= 1:
-            raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self.n_maps))
+        if not bias and self._n_maps <= 1:
+            raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self._n_maps))
 
         maps = self._get_maps(atlas=atlas)
         ddof = 0 if bias else 1
@@ -652,12 +639,12 @@ class Maps:
                 labels = labels[1:]
 
 
-        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose()
-        e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose()
+        e1 = scipy.sparse.csr_matrix(np.ones(self._n_maps)/(self._n_maps-ddof)).transpose()
+        e2 = scipy.sparse.csr_matrix(np.ones(self._n_maps)/(self._n_maps)).transpose()
 
         M1 = maps.dot(e1)
         M2 = maps.dot(e2)
-        M3 = maps.dot(maps.transpose())/((self.n_maps-ddof))
+        M3 = maps.dot(maps.transpose())/((self._n_maps-ddof))
 
         # Empirical covariance matrix
         S =  M3 - M1.dot(M2.transpose())
@@ -683,22 +670,22 @@ class Maps:
         current_map = self[0] if self.save_memory else self._maps_dense[:, :, :, 0]
         if sigma != None:
                 if self.save_memory:
-                    current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
+                    current_map = self.smooth_map(current_map, sigma, self._Ni, self._Nj, self._Nk)
                 else:
                     current_map = self.smooth_data(current_map, sigma)
 
         avg_map_n = copy.copy(current_map)
-        var_map_n = Maps.zeros(self.n_voxels).maps if self.save_memory else np.zeros((self.Ni, self.Nj, self.Nk))
+        var_map_n = Maps.zeros(self._n_voxels).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
 
-        for k in range(2, self.n_maps+1):
+        for k in range(2, self._n_maps+1):
             if verbose:
-                print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
+                print('Iterative smooth avg var {} out of {}...'.format(k, self._n_maps), end='\r', flush=True)
             avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
             current_map = self[k-1] if self.save_memory else self._maps_dense[:, :, :, k-1]
 
             if sigma != None:
                 if self.save_memory:
-                    current_map = self.smooth_map(current_map, sigma, self.Ni, self.Nj, self.Nk)
+                    current_map = self.smooth_map(current_map, sigma, self._Ni, self._Nj, self._Nk)
                 else:
                     current_map = self.smooth_data(current_map, sigma)
 
@@ -723,13 +710,13 @@ class Maps:
         var.maps = var_map_n if self.save_memory else self.data_to_map(var_map_n)
 
         if verbose:
-            print('Iterative smooth avg var {} out of {}... Done'.format(self.n_maps, self.n_maps))
+            print('Iterative smooth avg var {} out of {}... Done'.format(self._n_maps, self._n_maps))
 
         return avg, var
 
     def __iadd__(self, val):
-        if not self.has_same_header(val):
-            warnings.warn('Added maps don\'t have same header.', UserWarning)
+        # if not self.has_same_header(val):
+        #     warnings.warn('Added maps don\'t have same header.', UserWarning)
 
         self.maps += val.maps
 
@@ -741,8 +728,8 @@ class Maps:
         return result
 
     def __imul__(self, val):
-        if isinstance(val, Maps) and not self.has_same_header(val):
-            warnings.warn('Multiplied maps don\'t have same header.', UserWarning)
+        # if isinstance(val, Maps) and not self.has_same_header(val):
+        #     warnings.warn('Multiplied maps don\'t have same header.', UserWarning)
 
         self.maps *= val
         return self
