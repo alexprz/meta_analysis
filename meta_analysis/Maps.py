@@ -318,6 +318,9 @@ class Maps:
     def _has_atlas(self):
         return self._atlas is not None and self._atlas.atlas is not None
 
+    def _has_mask(self):
+        return self._mask is not None and isinstance(self._mask, nib.Nifti1Image)
+
     def _get_maps(self, atlas):
         return self._maps_atlas if atlas else self._maps
 
@@ -532,8 +535,11 @@ class Maps:
         else:
             raise ValueError('Invalid distribution p. Must be either None, Maps object or numpy.ndarray.')
 
-        if mask is not None:
-            mask = mask.reshape(-1, order='Fortran')
+        if use_mask:
+            if not self._has_mask():
+                raise AttributeError('No mask found. Consider to apply mask.')
+
+            mask = self._flatten_array(mask.get_fdata())
             p = np.ma.masked_array(p, np.logical_not(mask))
             p /= np.sum(p)
 
