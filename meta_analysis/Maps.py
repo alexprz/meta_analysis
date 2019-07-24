@@ -180,6 +180,9 @@ class Maps:
         elif Ni is None or Nj is None or Nk is None:
             raise ValueError('Must either specify Ni, Nj, Nk or template.')
 
+        if mask is not None and not isinstance(mask, nib.Nifti1Image):
+            raise ValueError('Mask must be an instance of nibabel.Nifti1Image')
+
         self._Ni = Ni
         self._Nj = Nj
         self._Nk = Nk
@@ -194,10 +197,10 @@ class Maps:
 
 
         if self._mask_dimensions_missmatch():
-            raise ValueError('Mask dimensions missmatch. Given box size ({}, {}, {}) whereas mask size is ({}, {}, {})'.format(self._Ni, self._Nj, self._Nk, *self._mask.shape))
+            raise ValueError('Mask dimensions missmatch. Given box size ({}, {}, {}) whereas mask size is {}'.format(self._Ni, self._Nj, self._Nk, self._mask.get_fdata().shape))
 
         if self._atlas_dimensions_missmatch():
-            raise ValueError('Atlas dimensions missmatch. Given box size ({}, {}, {}) whereas atlas size is ({}, {}, {})'.format(self._Ni, self._Nj, self._Nk, *self._atlas.data.shape))
+            raise ValueError('Atlas dimensions missmatch. Given box size ({}, {}, {}) whereas atlas size is {}'.format(self._Ni, self._Nj, self._Nk, self._atlas.data.shape))
 
 
         if isinstance(df, pd.DataFrame):
@@ -241,6 +244,10 @@ class Maps:
         if self._box_dimensions_missmatch():
             raise ValueError('Box dimension missmatch. Given box size is ({}, {}, {}) for {} voxels whereas maps contains {} voxels.'.format(self._Ni, self._Nj, self._Nk, self._Ni*self._Nj*self._Nk, self._maps.shape))
 
+
+        if self._has_mask():
+            self.apply_mask(mask)
+            
         self._build_atlas_filter_matrix()
         self._refresh_atlas_maps()
 
@@ -599,6 +606,9 @@ class Maps:
             Args:
                 mask (nibabel.Nifti1Image): Nifti1Image with 0 or 1 array. 0: outside the mask, 1: inside.
         '''
+        if not isinstance(mask, nib.Nifti1Image):
+            raise ValueError('Mask must be an instance of nibabel.Nifti1Image')
+
         mask_array = self._flatten_array(mask.get_fdata())
         filter_matrix = scipy.sparse.diags(mask_array, format='csr')
 
