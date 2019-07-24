@@ -177,8 +177,8 @@ class Maps:
         elif template is not None:
             raise ValueError('Template not understood. Must be a nibabel.Nifti1Image or a path to it.')
 
-        elif not isinstance(df, Maps) and (Ni is None or Nj is None or Nk is None or affine is None):
-            raise ValueError('Must either specify Ni, Nj, Nk, affine or template.')
+        elif not isinstance(df, Maps) and (Ni is None or Nj is None or Nk is None):
+            raise ValueError('Must either specify Ni, Nj, Nk or template.')
 
         self._Ni = Ni
         self._Nj = Nj
@@ -207,6 +207,9 @@ class Maps:
         if isinstance(df, pd.DataFrame):
             if groupby_col is None:
                 raise ValueError('Must specify column name to group by maps.')
+
+            if affine is None:
+                raise ValueError('Must specify affine to initialize with dataframe.')
 
             col_names = {
                 'groupby': groupby_col,
@@ -290,15 +293,14 @@ class Maps:
         return cls(df=(n_voxels, n_maps), **kwargs)
 
     @classmethod
-    def random(cls, Ni, Nj, Nk, n_peaks, n_maps, mask=None, atlas=None, p=None):
+    def random(cls, n_peaks, n_maps, Ni=None, Nj=None, Nk=None, affine=None, template=None, mask=None, atlas=None, p=None):
         '''
             Create the given number of maps and sample peaks on them. 
 
             See the Maps.__init__ doc for Ni, Nj, Nk, mask, atlas parameters.
             See the Maps.randomize doc for n_peaks, n_maps, p parameters.
         '''
-        maps = cls(df=None, Ni=Ni, Nj=Nj, Nk=Nk, atlas=atlas)
-        maps._mask = mask
+        maps = cls(df=None, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, template=template, mask=mask, atlas=atlas)
 
         return maps.randomize(n_peaks, n_maps, p=p, use_mask=(mask is not None), inplace=True)
 
