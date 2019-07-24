@@ -223,7 +223,19 @@ class NoneInitTestCase(unittest.TestCase):
         maps = Maps(template=template)
 
     def test_allowed_manual(self):
-        maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk, affine=affine)
+        maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, mask=gray_mask)
+
+    def test_allowed_template_mask(self):
+        maps = Maps(template=template)
+
+    def test_allowed_manual_mask(self):
+        maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, mask=gray_mask)
+
+    def test_allowed_template_atlas(self):
+        maps = Maps(template=template, atlas=atlas)
+
+    def test_allowed_manual_atlas(self):
+        maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, atlas=atlas)
 
     def test_allowed_manual_no_affine(self):
         maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk)
