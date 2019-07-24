@@ -57,21 +57,21 @@ def random_permitted_case_1D(draw):
 
     return p, Ni, Nj, Nk
 
-# @strats.composite
-# def empty_maps(draw, min_maps=1):
-#     Ni = draw(strats.integers(min_value=1, max_value=max_box_width))
-#     Nj = draw(strats.integers(min_value=1, max_value=max_box_width))
-#     Nk = draw(strats.integers(min_value=1, max_value=max_box_width))
-#     n_maps = draw(strats.integers(min_value=min_maps, max_value=max_maps))
+@strats.composite
+def empty_maps(draw, min_maps=1):
+    Ni = draw(strats.integers(min_value=1, max_value=max_box_width))
+    Nj = draw(strats.integers(min_value=1, max_value=max_box_width))
+    Nk = draw(strats.integers(min_value=1, max_value=max_box_width))
+    n_maps = draw(strats.integers(min_value=min_maps, max_value=max_maps))
 
-#     return Maps.zeros(Ni*Nj*Nk, n_maps)
+    return Maps.zeros(Ni*Nj*Nk, n_maps)
 
-# @strats.composite
-# def random_maps(draw, min_maps=1):
-#     Ni = draw(strats.integers(min_value=1, max_value=max_box_width))
-#     Nj = draw(strats.integers(min_value=1, max_value=max_box_width))
-#     Nk = draw(strats.integers(min_value=1, max_value=max_box_width))
-#     n_maps = draw(strats.integers(min_value=min_maps, max_value=max_maps))
-#     n_peaks = draw(strats.integers(min_value=0, max_value=max_peaks))
+@strats.composite
+def random_maps(draw, min_maps=1):
+    Ni = draw(strats.integers(min_value=1, max_value=max_box_width))
+    Nj = draw(strats.integers(min_value=1, max_value=max_box_width))
+    Nk = draw(strats.integers(min_value=1, max_value=max_box_width))
+    n_maps = draw(strats.integers(min_value=min_maps, max_value=max_maps))
+    n_peaks = draw(strats.integers(min_value=0, max_value=max_peaks))
 
-#     return Maps.random(Ni, Nj, Nk, n_peaks, n_maps)
+    return Maps.random(Ni, Nj, Nk, n_peaks, n_maps)

@@ -4,7 +4,7 @@ import numpy as np
 import scipy
 
 from meta_analysis import Maps
-from .globals import random_permitted_case_3D, random_permitted_case_1D, empty_maps, random_maps, gray_mask, template, atlas
+from globals_test import random_permitted_case_3D, random_permitted_case_1D, empty_maps, random_maps, gray_mask, template, atlas, affine
 
 class CoordinatesTestCase(unittest.TestCase):
     @given(args=random_permitted_case_3D())
@@ -37,4 +37,7 @@ class AtlasTestCase(unittest.TestCase):
         maps = Maps(template=template, atlas=atlas)
         self.assertTrue(maps._has_atlas())
 
-
+class StrTestCase(unittest.TestCase):
+    def test_minimal(self):
+        maps = Maps(np.array([[0]]), Ni=1, Nj=1, Nk=1)
+        str(maps)
