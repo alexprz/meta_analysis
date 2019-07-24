@@ -177,6 +177,12 @@ class Maps:
         elif template is not None:
             raise ValueError('Template not understood. Must be a nibabel.Nifti1Image or a path to it.')
 
+        elif isinstance(df, np.ndarray) and len(df.shape) == 3:
+            Ni, Nj, Nk = df.shape
+
+        elif isinstance(df, np.ndarray) and len(df.shape) == 4:
+            _, Ni, Nj, Nk = df.shape
+
         elif Ni is None or Nj is None or Nk is None:
             raise ValueError('Must either specify Ni, Nj, Nk or template.')
 
