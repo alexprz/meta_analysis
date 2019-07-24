@@ -20,6 +20,11 @@ avg_atlas, var_atlas = maps_atlas.iterative_smooth_avg_var(compute_var=True, sig
 
 
 @pytest.mark.mpl_image_compare
+def test_sum():
+    sum = maps.summed_map()
+    return plotting.plot_activity_map(sum.to_img())
+
+@pytest.mark.mpl_image_compare
 def test_avg():
     avg = maps.avg()
     return plotting.plot_activity_map(avg.to_img())
@@ -49,6 +54,11 @@ def test_iterative_avg_var_thresholded_1():
 @pytest.mark.mpl_image_compare
 def test_iterative_avg_var_thresholded_2():
     return plotting.plot_activity_map(var.to_img(), threshold=0.00002)
+
+@pytest.mark.mpl_image_compare
+def test_atlas_sum():
+    sum = maps_atlas.summed_map()
+    return plotting.plot_activity_map(sum.to_img_atlas())
 
 @pytest.mark.mpl_image_compare
 def test_atlas_avg():
