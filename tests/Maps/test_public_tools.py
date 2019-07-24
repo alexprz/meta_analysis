@@ -103,6 +103,47 @@ class NormalizeTestCase(unittest.TestCase):
         self.assertTrue(np.array_equal(maps2_.to_array(0), self.expected2[0]))
         self.assertTrue(np.array_equal(maps2_.to_array(1), self.expected2[1]))
 
+class RandomizeTestCase(unittest.TestCase):
+    def setUp(self):
+        self.p = np.array([[[0, 0.25, 0],
+                            [0, 0.5, 0],
+                            [0, 0, 0.25]]])
 
+        self.mask_data = np.array([[[0, 0, 0],
+                                    [0, 1, 0],
+                                    [0, 0, 0]]])
+
+        self.mask = nib.Nifti1Image(self.mask_data, affine)
+
+    def test_one_map(self):
+        maps = Maps(Ni=1, Nj=3, Nk=3).randomize(n_peaks=10, n_maps=1)
+
+    def test_two_maps(self):
+        maps = Maps(Ni=1, Nj=3, Nk=3).randomize(n_peaks=10, n_maps=2)
+
+    def test_two_maps_p(self):
+        maps = Maps(Ni=1, Nj=3, Nk=3).randomize(n_peaks=100, n_maps=2, p=self.p)
+        self.assertEqual(maps.to_array(0)[0, 0, 0], 0)
+
+    def test_two_maps_mask(self):
+        maps = Maps(Ni=1, Nj=3, Nk=3, mask=self.mask).randomize(n_peaks=100, n_maps=2)
+        self.assertEqual(maps.summed_map().to_array()[0, 1, 1], 100)
+    
+    def test_two_maps_p_mask(self):
+        maps = Maps(Ni=1, Nj=3, Nk=3, mask=self.mask).randomize(n_peaks=100, n_maps=2, p=self.p)
+        self.assertEqual(maps.to_array(0)[0, 0, 0], 0)
+        self.assertEqual(maps.summed_map().to_array()[0, 1, 1], 100)
+    
+    def test_two_maps_p_mask(self):
+        maps = Maps(Ni=1, Nj=3, Nk=3, mask=self.mask).randomize(n_peaks=100, n_maps=2, p=self.p, override_mask=True)
+        self.assertEqual(maps.to_array(0)[0, 0, 0], 0)
+
+    def test_p_forbidden(self):
+        p = np.array([[[1, 0, 0],
+                        [0, 1, 0],
+                        [0, 0, 0]]])
+        
+        with self.assertRaises(ValueError):
+            maps = Maps(Ni=1, Nj=3, Nk=3).randomize(n_peaks=10, n_maps=2, p=p)
 
 
