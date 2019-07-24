@@ -10,3 +10,4 @@ doc/*/
 *.prof
 .pytest_cache
 baseline
+.coverage*
