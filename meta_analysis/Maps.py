@@ -7,6 +7,7 @@ import nibabel as nib
 import pandas as pd
 from scipy.ndimage import gaussian_filter
 from sklearn.covariance import LedoitWolf
+from nilearn import datasets
 
 from .globals import mem
 
@@ -76,8 +77,14 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
             affine_r: new affine (changed if reduce != 1)
     '''
 
+    df = df.astype({col_names['x']: 'float64',
+               col_names['y']: 'float64',
+               col_names['z']: 'float64',
+               col_names['weight']: 'float64',
+               })
+
     # Creating map index
-    unique_pmid = df['pmid'].unique()
+    unique_pmid = df[col_names['groupby']].unique()
     n_maps = len(unique_pmid)
     index_dict = {k:v for v, k in enumerate(unique_pmid)}
 
@@ -102,7 +109,7 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
     
     results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
     
-    print('Merging...')
+    if verbose: print('Merging...')
     for m in results:
         maps += m
 
@@ -130,6 +137,7 @@ class Atlas:
 
 class Maps:
     def __init__(self, df=None,
+                       template=None,
                        Ni=None, Nj=None, Nk=None,
                        affine=None,
                        mask=None,
@@ -147,6 +155,7 @@ class Maps:
 
         Args:
             df (pandas.DataFrame): Pandas DataFrame containing the (x,y,z) coordinates, the weights and the map id. The names of the columns can be specified.
+            template (nibabel.Nifti1Image): Template storing the box size and affine. If not None, Will overwrite parameters Ni, Nj, Nk and affine.
             Ni (int): X size of the bounding box.
             Nj (int): Y size of the bounding box.
             Nk (int): Z size of the bounding box.
@@ -160,6 +169,17 @@ class Maps:
             weight_col (str): Name of the column storing the weights. 
         '''
 
+        if template is not None and (isinstance(template, nib.Nifti1Image) or isinstance(template, str)):
+            template = nilearn.image.load_img(template)
+            Ni, Nj, Nk = template.shape
+            affine = template.affine
+
+        elif template is not None:
+            raise ValueError('Template not understood. Must be a nibabel.Nifti1Image or a path to it.')
+
+        elif not isinstance(df, Maps) and (Ni is None or Nj is None or Nk is None or affine is None):
+            raise ValueError('Must either specify Ni, Nj, Nk, affine or template.')
+
         self._Ni = Ni
         self._Nj = Nj
         self._Nk = Nk
@@ -167,19 +187,26 @@ class Maps:
         self._save_memory = save_memory
         self._mask = mask
         self._maps = None
-        self._n_voxels, self._n_maps = 0, 0
         self._atlas = Atlas(atlas)
         self._maps_dense =  None
         self._maps_atlas = None
         self._atlas_filter_matrix = None
 
-        # Build maps
-        if isinstance(df, pd.DataFrame):
-            if groupby_col == None:
-                raise ValueError('Must specify column name to group by maps.')
 
-            if Ni is None or Nj is None or Nk is None or affine is None:
-                raise ValueError('Must specify box size (Ni, Nj, Nk) and affine when initializing with pandas dataframe.')
+        if isinstance(df, Maps):
+            self._copy_header(df)
+
+
+        if self._mask_dimensions_missmatch():
+            raise ValueError('Mask dimensions missmatch. Given box size ({}, {}, {}) whereas mask size is ({}, {}, {})'.format(self._Ni, self._Nj, self._Nk, *self._mask.shape))
+
+        if self._atlas_dimensions_missmatch():
+            raise ValueError('Atlas dimensions missmatch. Given box size ({}, {}, {}) whereas atlas size is ({}, {}, {})'.format(self._Ni, self._Nj, self._Nk, *self._atlas.data.shape))
+
+
+        if isinstance(df, pd.DataFrame):
+            if groupby_col is None:
+                raise ValueError('Must specify column name to group by maps.')
 
             col_names = {
                 'groupby': groupby_col,
@@ -191,6 +218,15 @@ class Maps:
 
             self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, verbose)
 
+        elif isinstance(df, np.ndarray) and len(df.shape) == 2:
+            self._maps = scipy.sparse.csr_matrix(df)
+
+        elif isinstance(df, np.ndarray) and len(df.shape) == 3:
+            self._maps = scipy.sparse.csr_matrix(self._flatten_array(df, _2D=True))
+
+        elif isinstance(df, np.ndarray) and len(df.shape) == 4:
+            self._maps = scipy.sparse.csr_matrix(df.reshape((df.shape[0], -1), order='F').transpose())
+
         elif isinstance(df, tuple):
             self._maps = scipy.sparse.csr_matrix(df)
 
@@ -200,12 +236,11 @@ class Maps:
         elif df is None:
             self._maps = None
 
-        else:
+        elif not isinstance(df, Maps):
             raise ValueError('First argument not understood. Must be pandas df, int or length 2 tuple.')
 
-        # Refresh infos according to new map
-        if self._maps is not None:
-            self._n_voxels, self._n_maps = self._maps.shape
+        if self._box_dimensions_missmatch():
+            raise ValueError('Box dimension missmatch. Given box size is ({}, {}, {}) for {} voxels whereas maps contains {} voxels.'.format(self._Ni, self._Nj, self._Nk, self._Ni*self._Nj*self._Nk, self._maps.shape))
 
         self._build_atlas_filter_matrix()
         self._refresh_atlas_maps()
@@ -231,17 +266,19 @@ class Maps:
 
     @maps.setter
     def maps(self, maps):
-        if maps is None:
-            self._n_voxels, self._n_maps = 0, 0
-
-        else:
-            self._n_voxels, self._n_maps = maps.shape
-
         self._maps = maps
         self._refresh_atlas_maps()
 
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
+
+    @property
+    def n_voxels(self):
+        return 0 if self._maps is None else self._maps.shape[0]
+
+    @property
+    def n_maps(self):
+        return 0 if self._maps is None else self._maps.shape[1]
 
     #_____________CLASS_METHODS_____________#
     @classmethod
@@ -320,7 +357,7 @@ class Maps:
             return
 
         atlas_data = self._flatten_array(self._atlas.data)
-        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self._n_voxels))
+        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self._Ni*self._Nj*self._Nk))
 
         for k in range(self._atlas.n_labels):
             row = atlas_data == k
@@ -329,7 +366,7 @@ class Maps:
         return scipy.sparse.csr_matrix(filter_matrix)
 
     def _refresh_atlas_maps(self):
-        if not self._has_atlas():
+        if not self._has_atlas() or self._maps is None:
             return
 
         if self._atlas_filter_matrix is None:
@@ -351,6 +388,35 @@ class Maps:
             self._maps_dense = None
         else:
             self._maps_dense = self._maps.toarray().reshape((self._Ni, self._Nj, self._Nk, self._n_maps), order='F')
+
+    def _box_dimensions_missmatch(self):
+        Ni, Nj, Nk = self._Ni, self._Nj, self._Nk
+
+        if self._maps is None:
+            return False
+
+        if Ni is not None and Nj is not None and Nk is not None and self._maps is not None and Ni*Nj*Nk == self._maps.shape[0]:
+            return False
+
+        return True
+
+    def _mask_dimensions_missmatch(self):
+        if not self._has_mask():
+            return False
+
+        if (self._Ni, self._Nj, self._Nk) == self._mask.shape:
+            return False
+
+        return True
+
+    def _atlas_dimensions_missmatch(self):
+        if not self._has_atlas():
+            return False
+
+        if (self._Ni, self._Nj, self._Nk) == self._atlas.data.shape:
+            return False
+
+        return True
 
     #_____________OPERATORS_____________#
 
