@@ -325,7 +325,7 @@ class Maps:
         string += 'Has atlas : {}\n'
         string += 'Map : \n{}\n'
         string += 'Atlas Map : \n{}\n'
-        return string.format(self._n_maps, self.maps.count_nonzero(), self._n_voxels, self._n_maps, self._Ni, self._Nj, self._Nk, self._affine, self._has_atlas(), self.maps, self._maps_atlas)
+        return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self._Ni, self._Nj, self._Nk, self._affine, self._has_atlas(), self.maps, self._maps_atlas)
 
     @staticmethod
     def coord_to_id(i, j, k, Ni, Nj, Nk):
@@ -336,7 +336,7 @@ class Maps:
         return np.unravel_index(id, (Ni, Nj, Nk), order='F')
 
     @staticmethod
-    def unflatten_array(self, array, Ni, Nj, Nk):
+    def unflatten_array(array, Ni, Nj, Nk):
         return array.reshape((Ni, Nj, Nk), order='F')
 
     def _coord_to_id(self, i, j, k):
@@ -387,7 +387,7 @@ class Maps:
         if self._maps is None:
             self._maps_dense = None
         else:
-            self._maps_dense = self._maps.toarray().reshape((self._Ni, self._Nj, self._Nk, self._n_maps), order='F')
+            self._maps_dense = self._maps.toarray().reshape((self._Ni, self._Nj, self._Nk, self.n_maps), order='F')
 
     def _box_dimensions_missmatch(self):
         Ni, Nj, Nk = self._Ni, self._Nj, self._Nk
@@ -493,8 +493,8 @@ class Maps:
         if map_id is not None:
             return self.map_to_array(self._maps[:, map_id], self._Ni, self._Nj, self._Nk)
 
-        if self._n_maps > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to array.'.format(self._n_maps))
+        if self.n_maps > 1:
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to array.'.format(self.n_maps))
 
         return self.map_to_array(self._maps[:, 0], self._Ni, self._Nj, self._Nk)
 
@@ -515,8 +515,8 @@ class Maps:
         if map_id is not None:
             return self.map_to_img(self._maps[:, map_id], self._Ni, self._Nj, self._Nk, self._affine)
 
-        if self._n_maps > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self._n_maps))
+        if self.n_maps > 1:
+            raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self.n_maps))
 
         return self.map_to_img(self._maps[:, 0], self._Ni, self._Nj, self._Nk, self._affine)
 
@@ -539,8 +539,8 @@ class Maps:
         if not self._has_atlas():
             raise AttributeError('No atlas were given.')
 
-        if map_id is None and self._n_maps > 1:
-            raise KeyError('This Maps object contains atlas {} maps, specify which map to convert to array.'.format(self._n_maps))
+        if map_id is None and self.n_maps > 1:
+            raise KeyError('This Maps object contains atlas {} maps, specify which map to convert to array.'.format(self.n_maps))
         elif map_id is None:
             map_id = 0
 
@@ -693,12 +693,12 @@ class Maps:
         lil_maps = scipy.sparse.lil_matrix(self.maps)
 
         if map_id is None:
-            map_ids = range(self._n_maps)
+            map_ids = range(self.n_maps)
         else:
             map_ids = [map_id]
 
         for k in map_ids:
-            if verbose: print('Smoothing {} out of {}.'.format(k+1, self._n_maps))
+            if verbose: print('Smoothing {} out of {}.'.format(k+1, self.n_maps))
             array = self.to_array(k)
             array = self._smooth_array(array, sigma=sigma)
             lil_maps[:, k] = self._flatten_array(array, _2D=True)
@@ -808,10 +808,10 @@ class Maps:
             Returns:
                 (Maps) New Maps instance containing the average map.
         '''
-        avg_map = Maps()
-        avg_map._copy_header(self)
+        avg_map = Maps(self)
         avg_map.maps = self._average(self.maps)
-        avg_map._maps_atlas = self._average(self._maps_atlas)
+        if self._has_atlas():
+            avg_map._maps_atlas = self._average(self._maps_atlas)
 
         return avg_map
 
@@ -851,8 +851,8 @@ class Maps:
         if not self._has_atlas():
             raise ValueError('No atlas. Must specify an atlas when initializing Maps or specify atlas=False in cov() function.')
 
-        if not bias and self._n_maps <= 1:
-            raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self._n_maps))
+        if not bias and self.n_maps <= 1:
+            raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self.n_maps))
 
         maps = self._get_maps(atlas=atlas)
         ddof = 0 if bias else 1
@@ -864,12 +864,12 @@ class Maps:
                 labels = labels[1:]
 
 
-        e1 = scipy.sparse.csr_matrix(np.ones(self._n_maps)/(self._n_maps-ddof)).transpose()
-        e2 = scipy.sparse.csr_matrix(np.ones(self._n_maps)/(self._n_maps)).transpose()
+        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose()
+        e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose()
 
         M1 = maps.dot(e1)
         M2 = maps.dot(e2)
-        M3 = maps.dot(maps.transpose())/((self._n_maps-ddof))
+        M3 = maps.dot(maps.transpose())/((self.n_maps-ddof))
 
         # Empirical covariance matrix
         S =  M3 - M1.dot(M2.transpose())
@@ -900,11 +900,11 @@ class Maps:
                     current_map = self._smooth_array(current_map, sigma)
 
         avg_map_n = copy.copy(current_map)
-        var_map_n = Maps.zeros(self._n_voxels).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
+        var_map_n = Maps.zeros(self.n_voxels).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
 
-        for k in range(2, self._n_maps+1):
+        for k in range(2, self.n_maps+1):
             if verbose:
-                print('Iterative smooth avg var {} out of {}...'.format(k, self._n_maps), end='\r', flush=True)
+                print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
             avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
             current_map = self[k-1] if self.save_memory else self._maps_dense[:, :, :, k-1]
 
@@ -935,7 +935,7 @@ class Maps:
         var.maps = var_map_n if self.save_memory else self.array_to_map(var_map_n)
 
         if verbose:
-            print('Iterative smooth avg var {} out of {}... Done'.format(self._n_maps, self._n_maps))
+            print('Iterative smooth avg var {} out of {}... Done'.format(self.n_maps, self.n_maps))
 
         return avg, var
 
