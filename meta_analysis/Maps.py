@@ -247,7 +247,7 @@ class Maps:
 
         if self._has_mask():
             self.apply_mask(mask)
-            
+
         self._build_atlas_filter_matrix()
         self._refresh_atlas_maps()
 
@@ -609,10 +609,11 @@ class Maps:
         if not isinstance(mask, nib.Nifti1Image):
             raise ValueError('Mask must be an instance of nibabel.Nifti1Image')
 
-        mask_array = self._flatten_array(mask.get_fdata())
-        filter_matrix = scipy.sparse.diags(mask_array, format='csr')
-
-        self.maps = filter_matrix.dot(self.maps)
+        if self.maps is not None:
+            mask_array = self._flatten_array(mask.get_fdata())
+            filter_matrix = scipy.sparse.diags(mask_array, format='csr')
+            self.maps = filter_matrix.dot(self.maps)
+            
         self._mask = mask
 
     def randomize(self, n_peaks, n_maps, p=None, use_mask=False, inplace=False):
@@ -762,10 +763,14 @@ class Maps:
             Args:
                 atlas (bool, optional): If True, the atlas maps are considered.
                 **kwargs: Kwargs are passed to scipy.sparse.csr_matrix.max() function.
-
+            Returns:
+                (numpy.ndarray) 2D numpy array
         '''
         maps = self._get_maps(atlas=atlas)
-        return maps.max()
+        max = maps.max(**kwargs)
+        if isinstance(max, scipy.sparse.coo.coo_matrix):
+            max = max.toarray()
+        return max
 
     def sum(self, atlas=False, **kwargs):
         '''
@@ -774,10 +779,14 @@ class Maps:
             Args:
                 atlas (bool, optional): If True, the atlas maps are considered.
                 **kwargs: Kwargs are passed to scipy.sparse.csr_matrix.sum() function.
-
+            Returns:
+                (numpy.ndarray) 2D numpy array
         '''
         maps = self._get_maps(atlas=atlas)
-        return maps.sum(**kwargs)
+        sum = maps.sum(**kwargs)
+        if isinstance(sum, scipy.sparse.coo.coo_matrix):
+            sum = sum.toarray()
+        return sum
 
     def summed_map(self):
         '''
