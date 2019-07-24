@@ -765,10 +765,10 @@ class Maps:
             Returns:
                 (Maps) New Maps instance containing the summed map.
         '''
-        sum_map = Maps()
-        sum_map._copy_header(self)
+        sum_map = Maps(self)
         sum_map.maps = scipy.sparse.csr_matrix(self.sum(axis=1))
-        sum_map._maps_atlas = scipy.sparse.csr_matrix(self.sum(atlas=True, axis=1))
+        if self._has_atlas():
+            sum_map._maps_atlas = scipy.sparse.csr_matrix(self.sum(atlas=True, axis=1))
 
         return sum_map
 
