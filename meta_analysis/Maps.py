@@ -718,7 +718,7 @@ class Maps:
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = csr_maps
         if new_maps._has_atlas():
-            new_maps.refresh_atlas_maps()
+            new_maps._refresh_atlas_maps()
         return new_maps
 
     #_____________STATISTICS_____________#
