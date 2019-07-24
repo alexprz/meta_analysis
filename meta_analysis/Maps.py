@@ -336,6 +336,11 @@ class Maps:
     @staticmethod
     def id_to_coord(id, Ni, Nj, Nk):
         return np.unravel_index(id, (Ni, Nj, Nk), order='F')
+   
+    @staticmethod
+    def flatten_array(array, _2D=False):
+        shape = (-1, 1) if _2D else -1
+        return array.reshape(shape, order='F')
 
     @staticmethod
     def unflatten_array(array, Ni, Nj, Nk):
@@ -460,7 +465,7 @@ class Maps:
 
     @staticmethod
     def array_to_map(array):
-        return scipy.sparse.csr_matrix(Maps._flatten_array(array, _2D=True))
+        return scipy.sparse.csr_matrix(Maps.flatten_array(array, _2D=True))
 
     @staticmethod
     def array_to_img(array, affine):
@@ -514,6 +519,9 @@ class Maps:
             Raises:
                 KeyError: If map_id is None and the instance contains more than one map. 
         '''
+        if self._affine is None:
+            raise ValueError('Must specify affine to convert maps to img.')
+
         if map_id is not None:
             return self.map_to_img(self._maps[:, map_id], self._Ni, self._Nj, self._Nk, self._affine)
 
@@ -677,7 +685,7 @@ class Maps:
     @staticmethod
     def _smooth_map(map, sigma, Ni, Nj, Nk):
         array = Maps.map_to_array(map, Ni, Nj, Nk)
-        array = self._smooth_array(array, sigma=sigma)
+        array = Maps._smooth_array(array, sigma=sigma)
         map = Maps.array_to_map(array)
         return map
 
@@ -827,10 +835,10 @@ class Maps:
             Returns:
                 (Maps) New Maps instance containing the variance map.
         '''
-        var_map = Maps()
-        var_map._copy_header(self)
+        var_map = Maps(self)
         var_map.maps = self._variance(self._maps, bias=bias)
-        var_map._maps_atlas = self._variance(self._maps_atlas, bias=bias)
+        if self._has_atlas():
+            var_map._maps_atlas = self._variance(self._maps_atlas, bias=bias)
 
         return var_map
 
@@ -902,7 +910,7 @@ class Maps:
                     current_map = self._smooth_array(current_map, sigma)
 
         avg_map_n = copy.copy(current_map)
-        var_map_n = Maps.zeros(self.n_voxels).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
+        var_map_n = Maps.zeros(self.n_voxels, Ni=self._Ni, Nj=self._Nj, Nk=self._Nk).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
 
         for k in range(2, self.n_maps+1):
             if verbose:
@@ -930,8 +938,8 @@ class Maps:
                 else:
                     var_map_n = (k-2)/(k-1)*var_map_p + np.power(avg_map_p - avg_map_n, 2) + 1./(k-1)*np.power(current_map-avg_map_n, 2)
 
-        avg = Maps()._copy_header(self)
-        var = Maps()._copy_header(self)
+        avg = Maps(self)
+        var = Maps(self)
 
         avg.maps = avg_map_n if self.save_memory else self.array_to_map(avg_map_n)
         var.maps = var_map_n if self.save_memory else self.array_to_map(var_map_n)
