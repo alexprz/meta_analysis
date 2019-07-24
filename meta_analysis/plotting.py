@@ -13,11 +13,11 @@ def plot_activity_map(stat_img, threshold=0., glass_brain=False):
         threshold : min value to display (in percent of maximum)
     '''
     if glass_brain:
-        plotting.plot_glass_brain(stat_img, black_bg=True, threshold=threshold)#*np.max(stat_img.get_data()))#, threshold=threshold)#threshold*np.max(stat_img.get_data()))
+        display = plotting.plot_glass_brain(stat_img, black_bg=True, threshold=threshold)#*np.max(stat_img.get_data()))#, threshold=threshold)#threshold*np.max(stat_img.get_data()))
     else:
-        plotting.plot_stat_map(stat_img, black_bg=True, threshold=threshold)#*np.max(stat_img.get_data()))#, threshold=threshold)#threshold*np.max(stat_img.get_data()))
-    plotting.show()
-    plt.show()
+        display = plotting.plot_stat_map(stat_img, black_bg=True, threshold=threshold)#*np.max(stat_img.get_data()))#, threshold=threshold)#threshold*np.max(stat_img.get_data()))
+
+    return display
 
 def plot_matrix_heatmap(M):
     sns.heatmap(M)
@@ -41,5 +41,4 @@ def plot_cov_matrix_brain(M, Ni, Nj, Nk, affine, threshold=None):
     for k in range(coords.shape[0]):
         coords_world[k, :] = np.dot(affine, [coords[k, 0], coords[k, 1], coords[k, 2], 1])[:-1]
 
-    plotting.plot_connectome(M, coords_world, node_size=5, node_color='black', edge_threshold=threshold*np.max(M))
-    plt.show()
+    return plotting.plot_connectome(M, coords_world, node_size=5, node_color='black', edge_threshold=threshold*np.max(M))
