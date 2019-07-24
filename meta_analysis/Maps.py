@@ -613,10 +613,10 @@ class Maps:
             mask_array = self._flatten_array(mask.get_fdata())
             filter_matrix = scipy.sparse.diags(mask_array, format='csr')
             self.maps = filter_matrix.dot(self.maps)
-            
+
         self._mask = mask
 
-    def randomize(self, n_peaks, n_maps, p=None, use_mask=False, inplace=False):
+    def randomize(self, n_peaks, n_maps, p=None, override_mask=False, inplace=False):
         '''
             Randomize the maps by sampling n_peaks of weight 1 (may overlap) over n_maps maps.
 
@@ -626,9 +626,9 @@ class Maps:
                 p (Maps instance or np.ndarray): (Optional) Distribution of probability of the peaks over the voxels.
                     The distribution may be given either by a Maps instance containing 1 map or a np.ndarray of same shape as the box of the current Maps instance (Ni, Nj, Nk).
                     If None, sample uniformly accros the box. Default: None
-                use_mask (bool): (Optional) If True, use the mask given when initializing the Maps object.
+                override_mask (bool): (Optional) If False, use the mask given when initializing the Maps object.
                     Important : the given distribution p is then shrinked and re-normalized.
-                    If False p is unchanged. Default : False.
+                    If True p is unchanged. Default : False.
                 inplace (bool): (Optional) Performs the sampling inplace (True) or creates a new instance (False). Default False.
 
             Returns:
@@ -655,12 +655,9 @@ class Maps:
         else:
             raise ValueError('Invalid distribution p. Must be either None, Maps object or numpy.ndarray.')
 
-        if use_mask:
-            if not self._has_mask():
-                raise AttributeError('No mask found. Consider to apply mask.')
-
-            mask = self._flatten_array(mask.get_fdata())
-            p = np.ma.masked_array(p, np.logical_not(mask))
+        if not override_mask and self._has_mask():
+            mask = self._flatten_array(self._mask.get_fdata())
+            p = np.ma.masked_array(p, np.logical_not(mask)).filled(0)
             p /= np.sum(p)
 
         maps = scipy.sparse.dok_matrix((n_voxels, n_maps))
