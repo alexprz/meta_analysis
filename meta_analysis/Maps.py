@@ -177,7 +177,7 @@ class Maps:
         elif template is not None:
             raise ValueError('Template not understood. Must be a nibabel.Nifti1Image or a path to it.')
 
-        elif not isinstance(df, Maps) and (Ni is None or Nj is None or Nk is None):
+        elif Ni is None or Nj is None or Nk is None:
             raise ValueError('Must either specify Ni, Nj, Nk or template.')
 
         self._Ni = Ni
@@ -191,10 +191,6 @@ class Maps:
         self._maps_dense =  None
         self._maps_atlas = None
         self._atlas_filter_matrix = None
-
-
-        if isinstance(df, Maps):
-            self._copy_header(df)
 
 
         if self._mask_dimensions_missmatch():
@@ -303,6 +299,21 @@ class Maps:
         maps = cls(df=None, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, template=template, mask=mask, atlas=atlas)
 
         return maps.randomize(n_peaks, n_maps, p=p, use_mask=(mask is not None), inplace=True)
+
+    @classmethod
+    def copy_header(cls, other):
+        '''
+            Create a Maps instance with same header as the passed Maps object.
+
+            Args:
+                other (Maps): Maps instance wanted informations.
+
+            Returns:
+                (Maps)
+        '''
+        maps = cls(Ni=other._Ni, Nj=other._Nj, Nk=other._Nk)
+        maps._copy_header(other)
+        return maps
 
     #_____________PRIVATE_TOOLS_____________#
     def _copy_header(self, other):
@@ -765,7 +776,7 @@ class Maps:
             Returns:
                 (Maps) New Maps instance containing the summed map.
         '''
-        sum_map = Maps(self)
+        sum_map = Maps.copy_header(self)
         sum_map.maps = scipy.sparse.csr_matrix(self.sum(axis=1))
         if self._has_atlas():
             sum_map._maps_atlas = scipy.sparse.csr_matrix(self.sum(atlas=True, axis=1))
@@ -818,7 +829,7 @@ class Maps:
             Returns:
                 (Maps) New Maps instance containing the average map.
         '''
-        avg_map = Maps(self)
+        avg_map = Maps.copy_header(self)
         avg_map.maps = self._average(self.maps)
         if self._has_atlas():
             avg_map._maps_atlas = self._average(self._maps_atlas)
@@ -835,7 +846,7 @@ class Maps:
             Returns:
                 (Maps) New Maps instance containing the variance map.
         '''
-        var_map = Maps(self)
+        var_map = Maps.copy_header(self)
         var_map.maps = self._variance(self._maps, bias=bias)
         if self._has_atlas():
             var_map._maps_atlas = self._variance(self._maps_atlas, bias=bias)
@@ -938,8 +949,8 @@ class Maps:
                 else:
                     var_map_n = (k-2)/(k-1)*var_map_p + np.power(avg_map_p - avg_map_n, 2) + 1./(k-1)*np.power(current_map-avg_map_n, 2)
 
-        avg = Maps(self)
-        var = Maps(self)
+        avg = Maps.copy_header(self)
+        var = Maps.copy_header(self)
 
         avg.maps = avg_map_n if self.save_memory else self.array_to_map(avg_map_n)
         var.maps = var_map_n if self.save_memory else self.array_to_map(var_map_n)

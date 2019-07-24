@@ -235,7 +235,3 @@ class NoneInitTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             maps = Maps(Ni=Ni, Nj=Nj, affine=affine)
 
-class MapsInitTestCase(unittest.TestCase):
-    def test_allowed(self):
-        maps = Maps(example_maps)
-
