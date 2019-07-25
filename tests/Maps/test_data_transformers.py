@@ -4,7 +4,7 @@ import numpy as np
 import scipy
 
 from meta_analysis import Maps
-from globals_test import random_permitted_case_3D, random_permitted_case_1D, empty_maps, random_maps, gray_mask, template, atlas, affine
+from globals_test import random_permitted_case_3D, random_permitted_case_1D, empty_maps, random_maps, gray_mask, template, atlas, affine, fmri_img
 
 class ToArrayTestCase(unittest.TestCase):
     def setUp(self):
@@ -94,3 +94,40 @@ class ToImgTestCase(unittest.TestCase):
         img = maps.to_img(0)
         self.assertTrue(np.array_equal(img.get_fdata(), self.array4D_2[:, :, :, 0]))
         self.assertTrue(np.array_equal(img.affine, self.affine))
+
+    def test_loaded_3D_img(self):
+        maps = Maps(template)
+        self.assertTrue(np.array_equal(maps.to_img().get_fdata(), template.get_fdata()))
+    
+    def test_loaded_4D_img(self):
+        maps = Maps(fmri_img)
+        self.assertTrue(np.array_equal(maps.to_img().get_fdata(), fmri_img.get_fdata()))
+
+    def test_forbidden_array_2D(self):
+        maps = Maps(self.array2D, Ni=2, Nj=1, Nk=1)
+        with self.assertRaises(ValueError):
+            maps.to_img()    
+    def test_forbidden_array_2D_one(self):
+        maps = Maps(self.array2D, Ni=2, Nj=1, Nk=1)
+        with self.assertRaises(ValueError):
+            maps.to_img()    
+    def test_forbidden_array_3D(self):
+        maps = Maps(self.array3D)
+        with self.assertRaises(ValueError):
+            maps.to_img()
+    def test_forbidden_array_4D(self):
+        maps = Maps(self.array4D)
+        with self.assertRaises(ValueError):
+            maps.to_img()
+    def test_forbidden_array_4D_one(self):
+        maps = Maps(self.array4D)
+        with self.assertRaises(ValueError):
+            maps.to_img()
+    def test_forbidden_array_4D_2_all(self):
+        maps = Maps(self.array4D_2)
+        with self.assertRaises(ValueError):
+            maps.to_img()        
+    def test_forbidden_array_4D_2_one(self):
+        maps = Maps(self.array4D_2)
+        with self.assertRaises(ValueError):
+            maps.to_img()
