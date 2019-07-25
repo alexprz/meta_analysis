@@ -5,6 +5,7 @@ import scipy, copy, nilearn
 import numpy as np
 import nibabel as nib
 import pandas as pd
+import nilearn
 from scipy.ndimage import gaussian_filter
 from sklearn.covariance import LedoitWolf
 from nilearn import datasets
@@ -117,6 +118,25 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
     
     return maps
 
+def build_maps_from_img(img):
+    img = nilearn.image.load_img(img)
+    n_dims = len(img.get_data().shape)
+
+    if n_dims == 4:
+        Ni, Nj, Nk, n_maps = img.shape
+
+    elif n_dims == 3:
+        Ni, Nj, Nk = img.shape
+        n_maps = 1
+
+    else:
+        raise ValueError('Image not supported. Must be a 3D or 4D image.')
+
+    data = Maps.flatten_array(img.get_data(), _2D=n_maps)
+    maps = scipy.sparse.csr_matrix(data)
+
+    return maps, Ni, Nj, Nk, img.affine
+
 class Atlas:
     def __init__(self, atlas):
         self.atlas = None
@@ -183,16 +203,12 @@ class Maps:
         elif isinstance(df, np.ndarray) and len(df.shape) == 4:
             _, Ni, Nj, Nk = df.shape
 
-        elif Ni is None or Nj is None or Nk is None:
-            raise ValueError('Must either specify Ni, Nj, Nk or template.')
+        elif isinstance(df, nib.Nifti1Image) or isinstance(df, str):
+            pass
 
         if mask is not None and not isinstance(mask, nib.Nifti1Image):
             raise ValueError('Mask must be an instance of nibabel.Nifti1Image')
 
-        self._Ni = Ni
-        self._Nj = Nj
-        self._Nk = Nk
-        self._affine = affine
         self._save_memory = save_memory
         self._mask = mask
         self._maps = None
@@ -202,19 +218,12 @@ class Maps:
         self._atlas_filter_matrix = None
 
 
-        if self._mask_dimensions_missmatch():
-            raise ValueError('Mask dimensions missmatch. Given box size ({}, {}, {}) whereas mask size is {}'.format(self._Ni, self._Nj, self._Nk, self._mask.get_fdata().shape))
-
-        if self._atlas_dimensions_missmatch():
-            raise ValueError('Atlas dimensions missmatch. Given box size ({}, {}, {}) whereas atlas size is {}'.format(self._Ni, self._Nj, self._Nk, self._atlas.data.shape))
-
-
         if isinstance(df, pd.DataFrame):
             if groupby_col is None:
                 raise ValueError('Must specify column name to group by maps.')
 
-            if affine is None:
-                raise ValueError('Must specify affine to initialize with dataframe.')
+            if Ni is None or Nj is None or Nk is None or affine is None:
+                raise ValueError('Must specify Ni, Nj, Nk and affine to initialize with dataframe.')
 
             col_names = {
                 'groupby': groupby_col,
@@ -226,11 +235,14 @@ class Maps:
 
             self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, verbose)
 
+        elif isinstance(df, nib.Nifti1Image) or isinstance(df, str) or isinstance(df, list):
+            self._maps, Ni, Nj, Nk, affine = build_maps_from_img(df)
+
         elif isinstance(df, np.ndarray) and len(df.shape) == 2:
             self._maps = scipy.sparse.csr_matrix(df)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 3:
-            self._maps = scipy.sparse.csr_matrix(self._flatten_array(df, _2D=True))
+            self._maps = scipy.sparse.csr_matrix(self._flatten_array(df, _2D=1))
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 4:
             self._maps = scipy.sparse.csr_matrix(df.reshape((df.shape[0], -1), order='F').transpose())
@@ -245,7 +257,23 @@ class Maps:
             self._maps = None
 
         elif not isinstance(df, Maps):
-            raise ValueError('First argument not understood. Must be pandas df, int or length 2 tuple.')
+            raise ValueError('First argument not understood : {}'.format(type(df)))
+
+
+        if Ni is None or Nj is None or Nk is None:
+            raise ValueError('Must either specify Ni, Nj, Nk or template.')
+
+        self._Ni = Ni
+        self._Nj = Nj
+        self._Nk = Nk
+        self._affine = affine
+
+
+        if self._mask_dimensions_missmatch():
+            raise ValueError('Mask dimensions missmatch. Given box size ({}, {}, {}) whereas mask size is {}. Consider resampling either input data or mask.'.format(self._Ni, self._Nj, self._Nk, self._mask.get_fdata().shape))
+
+        if self._atlas_dimensions_missmatch():
+            raise ValueError('Atlas dimensions missmatch. Given box size ({}, {}, {}) whereas atlas size is {}. Consider resampling either input data or atlas.'.format(self._Ni, self._Nj, self._Nk, self._atlas.data.shape))
 
         if self._box_dimensions_missmatch():
             raise ValueError('Box dimension missmatch. Given box size is ({}, {}, {}) for {} voxels whereas maps contains {} voxels.'.format(self._Ni, self._Nj, self._Nk, self._Ni*self._Nj*self._Nk, self._maps.shape))
@@ -362,8 +390,8 @@ class Maps:
         return np.unravel_index(id, (Ni, Nj, Nk), order='F')
    
     @staticmethod
-    def flatten_array(array, _2D=False):
-        shape = (-1, 1) if _2D else -1
+    def flatten_array(array, _2D=None):
+        shape = -1 if _2D is None else (-1, _2D)
         return array.reshape(shape, order='F')
 
     @staticmethod
@@ -376,9 +404,8 @@ class Maps:
     def _id_to_coord(self, id):
         return self.id_to_coord(id, self._Ni, self._Nj, self._Nk)
 
-    def _flatten_array(self, array, _2D=False):
-        shape = (-1, 1) if _2D else -1
-        return array.reshape(shape, order='F')
+    def _flatten_array(self, array, _2D=None):
+        return self.flatten_array(array, _2D=_2D)
 
     def _unflatten_array(self, array):
         return self.unflatten_array(array, self._Ni, self._Nj, self._Nk)
@@ -489,7 +516,7 @@ class Maps:
 
     @staticmethod
     def array_to_map(array):
-        return scipy.sparse.csr_matrix(Maps.flatten_array(array, _2D=True))
+        return scipy.sparse.csr_matrix(Maps.flatten_array(array, _2D=1))
 
     @staticmethod
     def array_to_img(array, affine):
@@ -736,7 +763,7 @@ class Maps:
             if verbose: print('Smoothing {} out of {}.'.format(k+1, self.n_maps))
             array = self.to_array(k)
             array = self._smooth_array(array, sigma=sigma)
-            lil_maps[:, k] = self._flatten_array(array, _2D=True)
+            lil_maps[:, k] = self._flatten_array(array, _2D=1)
 
         csr_maps = scipy.sparse.csr_matrix(lil_maps)
 
