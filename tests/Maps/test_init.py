@@ -5,7 +5,10 @@ import numpy as np
 import scipy
 
 from meta_analysis import Maps
-from globals_test import gray_mask, template, atlas, df, Ni, Nj, Nk, groupby_col, affine, array2D, array3D, array4D_1, array4D_2, example_maps, array2D_missmatch, array3D_missmatch, array4D_1_missmatch, array4D_2_missmatch, gray_mask_missmatch
+from globals_test import gray_mask, template, atlas, df, Ni, Nj, Nk, \
+ groupby_col, affine, array2D, array3D, array4D_1, array4D_2, \
+ example_maps, array2D_missmatch, array3D_missmatch, array4D_1_missmatch, \
+ array4D_2_missmatch, gray_mask_missmatch, fmri_img, gray_mask_2, atlas_2
 
 class DataFrameInitTestCase(unittest.TestCase):
     def test_allowed_template(self):
@@ -247,3 +250,20 @@ class NoneInitTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             maps = Maps(Ni=Ni, Nj=Nj, affine=affine)
 
+class ImgInitTestCase(unittest.TestCase):
+    def test_allowed(self):
+        maps = Maps(fmri_img)
+
+    def test_allowed_atlas(self):
+        maps = Maps(fmri_img, atlas=atlas_2)
+
+    def test_allowed_mask(self):
+        maps = Maps(fmri_img, mask=gray_mask_2)
+
+    def test_atlas_missmatch(self):
+        with self.assertRaises(ValueError):
+            maps = Maps(fmri_img, atlas=atlas)
+
+    def test_mask_missmatch(self):
+        with self.assertRaises(ValueError):
+            maps = Maps(fmri_img, mask=gray_mask)
