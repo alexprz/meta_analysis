@@ -395,8 +395,9 @@ class Maps:
         return array.reshape(shape, order='F')
 
     @staticmethod
-    def unflatten_array(array, Ni, Nj, Nk):
-        return array.reshape((Ni, Nj, Nk), order='F')
+    def unflatten_array(array, Ni, Nj, Nk, _4D=None):
+        shape = (Ni, Nj, Nk) if _4D is None or _4D == 1 else (Ni, Nj, Nk, _4D)
+        return array.reshape(shape, order='F')
 
     def _coord_to_id(self, i, j, k):
         return self.coord_to_id(i, j, k, self._Ni, self._Nj, self._Nk)
@@ -407,8 +408,8 @@ class Maps:
     def _flatten_array(self, array, _2D=None):
         return self.flatten_array(array, _2D=_2D)
 
-    def _unflatten_array(self, array):
-        return self.unflatten_array(array, self._Ni, self._Nj, self._Nk)
+    def _unflatten_array(self, array, _4D=None):
+        return self.unflatten_array(array, self._Ni, self._Nj, self._Nk, _4D=_4D)
 
     def _build_atlas_filter_matrix(self):
         if not self._has_atlas():
@@ -507,12 +508,12 @@ class Maps:
 
             Indexing of map is supposed to have been made Fortran like (first index moving fastest).
         '''
-        n_voxels, _ = map.shape
+        n_voxels, n_maps = map.shape
 
         if n_voxels != Ni*Nj*Nk:
             raise ValueError('Map\'s length ({}) does not match given box ({}, {}, {}) of size {}.'.format(n_voxels, Ni, Nj, Nk, Ni*Nj*Nk))
 
-        return Maps.unflatten_array(map.toarray(), Ni, Nj, Nk)
+        return Maps.unflatten_array(map.toarray(), Ni, Nj, Nk, _4D=n_maps)
 
     @staticmethod
     def array_to_map(array):
@@ -539,55 +540,55 @@ class Maps:
             Convert one map into a 3D numpy.ndarray.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert. 
-                    If None, convert the unique contained map, if several maps, raise an error. Defaults to None. 
+                map_id (int, optional): If int : id of the map to convert (3D output). 
+                    If None, converts all the maps (4D output). Defaults to None. 
         
             Returns:
                 (numpy.ndarray) 3D array containing the chosen map information.
-
-            Raises:
-                KeyError: If map_id is None and the instance contains more than one map. 
         '''
+        maps = self._maps
+
         if map_id is not None:
-            return self.map_to_array(self._maps[:, map_id], self._Ni, self._Nj, self._Nk)
+            maps = self._maps[:, map_id]
 
-        if self.n_maps > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to array.'.format(self.n_maps))
-
-        return self.map_to_array(self._maps[:, 0], self._Ni, self._Nj, self._Nk)
+        return self.map_to_array(maps, self._Ni, self._Nj, self._Nk)
 
     def to_img(self, map_id=None):
         '''
             Convert one map into a nibabel.Nifti1Image.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert. 
-                    If None, convert the unique contained map, if several maps, raise an error. Defaults to None. 
+                map_id (int, optional): If int : id of the map to convert (3D output). 
+                    If None, converts all the maps (4D output). Defaults to None. 
         
             Returns:
                 (nibabel.Nifti1Image) Nifti1Image containing the chosen map information.
-
-            Raises:
-                KeyError: If map_id is None and the instance contains more than one map. 
         '''
         if self._affine is None:
             raise ValueError('Must specify affine to convert maps to img.')
 
+        maps = self._maps
         if map_id is not None:
-            return self.map_to_img(self._maps[:, map_id], self._Ni, self._Nj, self._Nk, self._affine)
+            maps = self._maps[:, map_id]
 
-        if self.n_maps > 1:
-            raise KeyError('This Maps object contains {} maps, specify which map to convert to img.'.format(self.n_maps))
+        return self.map_to_img(maps, self._Ni, self._Nj, self._Nk, self._affine)
 
-        return self.map_to_img(self._maps[:, 0], self._Ni, self._Nj, self._Nk, self._affine)
+    @staticmethod
+    def _one_map_to_array_atlas(map, Ni, Nj, Nk, atlas_data, label_range):
+        array = np.zeros((Ni, Nj, Nk))
+
+        for k in label_range:
+            array[atlas_data == k] = map[k, 0]
+
+        return array
 
     def to_array_atlas(self, map_id=None, ignore_bg=True):
         '''
             Convert one atlas map into a 3D numpy.array.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert. 
-                    If None, converts the unique contained atlas map, if several atlas maps, raise an error. Defaults to None.
+                map_id (int, optional): If int : id of the map to convert (3D output). 
+                    If None, converts all the maps (4D output). Defaults to None.
                 ignore_bg (bool, optional): If True: ignore the first label of the atlas (background) which is set to 0 in the returned array.
 
             Returns:
@@ -595,31 +596,31 @@ class Maps:
 
             Raises:
                 AttributeError: If no atlas has been given to this instance.
-                KeyError: If map_id is None and the instance contains more than one map. 
         '''
         if not self._has_atlas():
             raise AttributeError('No atlas were given.')
 
-        if map_id is None and self.n_maps > 1:
-            raise KeyError('This Maps object contains atlas {} maps, specify which map to convert to array.'.format(self.n_maps))
-        elif map_id is None:
-            map_id = 0
-
-        array = np.zeros((self._Ni, self._Nj, self._Nk))
         start = 1 if ignore_bg else 0
+        label_range = range(start, self._atlas.n_labels)
 
-        for k in range(start, self._atlas.n_labels):
-            array[self._atlas.data == k] = self._maps_atlas[k, map_id]
+        if map_id is None:
+            array = np.zeros((self._Ni, self._Nj, self._Nk, self.n_maps))
+            
+            for k in range(self.n_maps):
+                array[:, :, :, k] = self._one_map_to_array_atlas(self._maps_atlas[:, k], self._Ni, self._Nj, self._Nk, self._atlas.data, label_range)
+        else:
+            array = np.zeros((self._Ni, self._Nj, self._Nk))
+            array[:, :, :] = self._one_map_to_array_atlas(self._maps_atlas[:, map_id], self._Ni, self._Nj, self._Nk, self._atlas.data, label_range)
 
         return array
 
-    def to_img_atlas(self, map_id=0, ignore_bg=True):
+    def to_img_atlas(self, map_id=None, ignore_bg=True):
         '''
             Convert one atlas map into a nibabel.Nifti1Image.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert. 
-                    If None, converts the unique contained atlas map, if several atlas maps, raise an error. Defaults to None.
+                map_id (int, optional): If int : id of the map to convert (3D output). 
+                    If None, converts all the maps (4D output). Defaults to None.
                 ignore_bg (bool, optional): If True: ignore the first label of the atlas (background) which is set to 0 in the returned array.
 
             Returns:
@@ -627,7 +628,6 @@ class Maps:
 
             Raises:
                 AttributeError: If no atlas as been given to this instance.
-                KeyError: If map_id is None and the instance contains more than one map. 
         '''
         return self.array_to_img(self.to_array_atlas(map_id=map_id, ignore_bg=ignore_bg), self._affine)
 
