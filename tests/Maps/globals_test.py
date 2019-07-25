@@ -4,6 +4,9 @@ import pandas as pd
 import numpy as np
 import copy
 import nibabel as nib
+from nistats.datasets import fetch_spm_auditory
+import nilearn
+import copy
 
 from meta_analysis import Maps
 
@@ -20,18 +23,24 @@ Ni, Nj, Nk = template.shape
 gray_mask_data = gray_mask.get_fdata()
 gray_mask_missmatch = nib.Nifti1Image(np.delete(gray_mask_data, 0, 0), affine)
 
+subject_data = fetch_spm_auditory()
+fmri_img = nilearn.image.concat_imgs(subject_data.func, auto_resample=True)
+atlas_2 = copy.deepcopy(atlas)
+atlas_2['maps'] = nilearn.image.resample_img(nilearn.image.load_img(atlas['maps']), fmri_img.affine, fmri_img.shape[:-1])
+gray_mask_2 = nilearn.image.resample_img(gray_mask, fmri_img.affine, fmri_img.shape[:-1])
+
 groupby_col = 'map__id'
 df = pd.DataFrame(np.array([['mymap', -3, 42, 12, 1], ['mymap', -3, 42, 12, 1], ['mymap2', -3, 42, 12, 1]]), columns=['map__id', 'x', 'y', 'z', 'weight'])
 
 array2D = np.random.rand(Ni*Nj*Nk, 2)
 array3D = np.random.rand(Ni, Nj, Nk)
-array4D_1 = np.array([np.random.rand(Ni, Nj, Nk)])
-array4D_2 = np.array([np.random.rand(Ni, Nj, Nk), np.random.rand(Ni, Nj, Nk)])
+array4D_1 = np.random.rand(Ni, Nj, Nk, 1)
+array4D_2 = np.random.rand(Ni, Nj, Nk, 2)
 
 array2D_missmatch = np.random.rand(Ni*Nj*Nk-1, 2)
 array3D_missmatch = np.random.rand(Ni, Nj, Nk-1)
-array4D_1_missmatch = np.array([np.random.rand(Ni-1, Nj, Nk)])
-array4D_2_missmatch = np.array([np.random.rand(Ni, Nj-1, Nk), np.random.rand(Ni, Nj-1, Nk)])
+array4D_1_missmatch = np.random.rand(Ni-1, Nj, Nk, 1)
+array4D_2_missmatch = np.random.rand(Ni, Nj-1, Nk, 2)
 
 example_maps = Maps(df, template=template, groupby_col=groupby_col)
 

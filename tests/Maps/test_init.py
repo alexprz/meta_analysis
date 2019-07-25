@@ -5,7 +5,10 @@ import numpy as np
 import scipy
 
 from meta_analysis import Maps
-from globals_test import gray_mask, template, atlas, df, Ni, Nj, Nk, groupby_col, affine, array2D, array3D, array4D_1, array4D_2, example_maps, array2D_missmatch, array3D_missmatch, array4D_1_missmatch, array4D_2_missmatch, gray_mask_missmatch
+from globals_test import gray_mask, template, atlas, df, Ni, Nj, Nk, \
+ groupby_col, affine, array2D, array3D, array4D_1, array4D_2, \
+ example_maps, array2D_missmatch, array3D_missmatch, array4D_1_missmatch, \
+ array4D_2_missmatch, gray_mask_missmatch, fmri_img, gray_mask_2, atlas_2
 
 class DataFrameInitTestCase(unittest.TestCase):
     def test_allowed_template(self):
@@ -105,25 +108,25 @@ class ArrayInitTestCase(unittest.TestCase):
     def test_allowed_4D_2_manual_no_affine(self):
         maps = Maps(array4D_2, Ni=Ni, Nj=Nj, Nk=Nk)
 
+    def test_allowed_3D_manual_no_data(self):
+        maps = Maps(array3D)
+        self.assertEqual(array3D.shape, (maps._Ni, maps._Nj, maps._Nk))
+    def test_allowed_4D_1_manual_no_data(self):
+        maps = Maps(array4D_1)
+        self.assertEqual(array4D_1.shape[:-1], (maps._Ni, maps._Nj, maps._Nk))
+    def test_allowed_4D_2_manual_no_data(self):
+        maps = Maps(array4D_2)
+        self.assertEqual(array4D_2.shape[:-1], (maps._Ni, maps._Nj, maps._Nk))
+
     def test_forbidden(self):
         with self.assertRaises(ValueError):
             maps = Maps(array2D)
-        with self.assertRaises(ValueError):
-            maps = Maps(array3D)
-        with self.assertRaises(ValueError):
-            maps = Maps(array4D_1)
-        with self.assertRaises(ValueError):
-            maps = Maps(array4D_2)
 
     def test_forbidden_manual(self):
         with self.assertRaises(ValueError):
             maps = Maps(array2D, Ni=Ni, Nj=Nj, affine=affine)
         with self.assertRaises(ValueError):
-            maps = Maps(array3D, Ni=Ni, Nj=Nj, affine=affine)
-        with self.assertRaises(ValueError):
-            maps = Maps(array4D_1, Ni=Ni, Nj=Nj, affine=affine)
-        with self.assertRaises(ValueError):
-            maps = Maps(array4D_2, Ni=Ni, Nj=Nj, affine=affine)
+            maps = Maps(array2D, Ni=Ni, Nj=Nj)
 
     @given(di=strats.integers(min_value=-Ni+1, max_value=Ni-1),
            dj=strats.integers(min_value=-Ni+1, max_value=Ni-1),
@@ -134,12 +137,12 @@ class ArrayInitTestCase(unittest.TestCase):
             return 
         with self.assertRaises(ValueError):
             maps = Maps(array2D, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
-        with self.assertRaises(ValueError):
-            maps = Maps(array3D, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
-        with self.assertRaises(ValueError):
-            maps = Maps(array4D_1, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
-        with self.assertRaises(ValueError):
-            maps = Maps(array4D_2, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
+        # with self.assertRaises(ValueError):
+        #     maps = Maps(array3D, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
+        # with self.assertRaises(ValueError):
+        #     maps = Maps(array4D_1, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
+        # with self.assertRaises(ValueError):
+        #     maps = Maps(array4D_2, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
 
     def test_box_missmatch_template(self):
         with self.assertRaises(ValueError):
@@ -247,3 +250,20 @@ class NoneInitTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             maps = Maps(Ni=Ni, Nj=Nj, affine=affine)
 
+class ImgInitTestCase(unittest.TestCase):
+    def test_allowed(self):
+        maps = Maps(fmri_img)
+
+    def test_allowed_atlas(self):
+        maps = Maps(fmri_img, atlas=atlas_2)
+
+    def test_allowed_mask(self):
+        maps = Maps(fmri_img, mask=gray_mask_2)
+
+    def test_atlas_missmatch(self):
+        with self.assertRaises(ValueError):
+            maps = Maps(fmri_img, atlas=atlas)
+
+    def test_mask_missmatch(self):
+        with self.assertRaises(ValueError):
+            maps = Maps(fmri_img, mask=gray_mask)
