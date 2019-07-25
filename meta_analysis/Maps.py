@@ -201,7 +201,7 @@ class Maps:
             Ni, Nj, Nk = df.shape
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 4:
-            _, Ni, Nj, Nk = df.shape
+            Ni, Nj, Nk, _ = df.shape
 
         elif isinstance(df, nib.Nifti1Image) or isinstance(df, str):
             pass
@@ -245,7 +245,7 @@ class Maps:
             self._maps = scipy.sparse.csr_matrix(self._flatten_array(df, _2D=1))
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 4:
-            self._maps = scipy.sparse.csr_matrix(df.reshape((df.shape[0], -1), order='F').transpose())
+            self._maps = scipy.sparse.csr_matrix(df.reshape((-1, df.shape[-1]), order='F'))
 
         elif isinstance(df, tuple):
             self._maps = scipy.sparse.csr_matrix(df)

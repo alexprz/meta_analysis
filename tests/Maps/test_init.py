@@ -113,10 +113,10 @@ class ArrayInitTestCase(unittest.TestCase):
         self.assertEqual(array3D.shape, (maps._Ni, maps._Nj, maps._Nk))
     def test_allowed_4D_1_manual_no_data(self):
         maps = Maps(array4D_1)
-        self.assertEqual(array4D_1.shape[1:], (maps._Ni, maps._Nj, maps._Nk))
+        self.assertEqual(array4D_1.shape[:-1], (maps._Ni, maps._Nj, maps._Nk))
     def test_allowed_4D_2_manual_no_data(self):
         maps = Maps(array4D_2)
-        self.assertEqual(array4D_2.shape[1:], (maps._Ni, maps._Nj, maps._Nk))
+        self.assertEqual(array4D_2.shape[:-1], (maps._Ni, maps._Nj, maps._Nk))
 
     def test_forbidden(self):
         with self.assertRaises(ValueError):

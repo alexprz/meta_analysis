@@ -34,13 +34,13 @@ df = pd.DataFrame(np.array([['mymap', -3, 42, 12, 1], ['mymap', -3, 42, 12, 1], 
 
 array2D = np.random.rand(Ni*Nj*Nk, 2)
 array3D = np.random.rand(Ni, Nj, Nk)
-array4D_1 = np.array([np.random.rand(Ni, Nj, Nk)])
-array4D_2 = np.array([np.random.rand(Ni, Nj, Nk), np.random.rand(Ni, Nj, Nk)])
+array4D_1 = np.random.rand(Ni, Nj, Nk, 1)
+array4D_2 = np.random.rand(Ni, Nj, Nk, 2)
 
 array2D_missmatch = np.random.rand(Ni*Nj*Nk-1, 2)
 array3D_missmatch = np.random.rand(Ni, Nj, Nk-1)
-array4D_1_missmatch = np.array([np.random.rand(Ni-1, Nj, Nk)])
-array4D_2_missmatch = np.array([np.random.rand(Ni, Nj-1, Nk), np.random.rand(Ni, Nj-1, Nk)])
+array4D_1_missmatch = np.random.rand(Ni-1, Nj, Nk, 1)
+array4D_2_missmatch = np.random.rand(Ni, Nj-1, Nk, 2)
 
 example_maps = Maps(df, template=template, groupby_col=groupby_col)
 
