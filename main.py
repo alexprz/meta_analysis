@@ -42,3 +42,7 @@ if __name__ == '__main__':
     plotting.plot_activity_map(avg_smoothed.to_img(), title='Avg smoothed thresholded', threshold=threshold['avg'])
     plotting.plot_activity_map(var_smoothed.to_img(), title='Var smoothed thresholded', threshold=threshold['var'])
     plt.show()
+
+    cov, labels = maps.cov()
+    nilearn.plotting.plot_matrix(cov, labels=labels)
+    nilearn.plotting.show()
