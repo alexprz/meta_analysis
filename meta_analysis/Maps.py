@@ -666,6 +666,12 @@ class Maps:
         '''
         return self.array_to_img(self.to_array_atlas(map_id=map_id, ignore_bg=ignore_bg), self._affine)
 
+    def _to_map_atlas(self, data):
+        if isinstance(data, np.ndarray):
+            data = scipy.sparse.csr_matrix(self.flatten_array(data, _2D=1))
+
+        return self._atlas_filter_matrix.dot(data)
+
     #_____________PUBLIC_TOOLS_____________#
     def apply_mask(self, mask):
         '''
@@ -1039,6 +1045,8 @@ class Maps:
 
         avg_map = None
         var_map = None
+        avg_map_atlas = None
+        var_map_atlas = None
 
         for k in range(self.n_maps):
             print_percent(k, self.n_maps, 'Iterative smooth avg var {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
@@ -1049,6 +1057,11 @@ class Maps:
             avg_map = self._iterative_avg(k+1, avg_map, current_map)
             var_map = self._iterative_var(k+1, var_map, avg_map, current_map, bias=bias)
 
+            if self._has_atlas():
+                current_map_atlas = self._to_map_atlas(current_map)
+                avg_map_atlas = self._iterative_avg(k+1, avg_map_atlas, current_map_atlas)
+                var_map_atlas = self._iterative_var(k+1, var_map_atlas, avg_map_atlas, current_map_atlas, bias=bias)
+
         avg = Maps.copy_header(self)
         var = Maps.copy_header(self)
 
@@ -1057,6 +1070,10 @@ class Maps:
         
         avg._set_maps(avg_map, refresh_atlas_maps=False)
         var._set_maps(var_map, refresh_atlas_maps=False)
+
+        if self._has_atlas():
+            avg._maps_atlas = avg_map_atlas
+            var._maps_atlas = var_map_atlas
 
         return avg, var
 
