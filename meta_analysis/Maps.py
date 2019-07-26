@@ -285,6 +285,9 @@ class Maps:
         self._build_atlas_filter_matrix()
         self._refresh_atlas_maps()
 
+        if not save_memory:
+            self._set_dense_maps()
+
 
     #_____________PROPERTIES_____________#
     @property
@@ -446,7 +449,7 @@ class Maps:
         if self._maps is None:
             self._maps_dense = None
         else:
-            self._maps_dense = self._maps.toarray().reshape((self._Ni, self._Nj, self._Nk, self.n_maps), order='F')
+            self._maps_dense = Maps.unflatten_array(self._maps.toarray(), self._Ni, self._Nj, self._Nk, _4D=self.n_maps)
 
     def _box_dimensions_missmatch(self):
         Ni, Nj, Nk = self._Ni, self._Nj, self._Nk

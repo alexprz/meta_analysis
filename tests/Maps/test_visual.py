@@ -14,7 +14,7 @@ sigma = 2.
 # Maps
 df = build_df_from_keyword(keyword)
 maps = Maps(df, template=template, groupby_col='pmid')
-maps_dense = Maps(df, template=template, groupby_col='pmid', save_memory=True)
+maps_dense = Maps(df, template=template, groupby_col='pmid', save_memory=False)
 maps_atlas = Maps(df, template=template, groupby_col='pmid', atlas=atlas)
 avg, var = maps.iterative_smooth_avg_var(compute_var=True, sigma=sigma, bias=False)
 avg_dense, var_dense = maps_dense.iterative_smooth_avg_var(compute_var=True, sigma=sigma, bias=False)
