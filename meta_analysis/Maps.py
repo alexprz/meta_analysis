@@ -996,13 +996,13 @@ class Maps:
                 else:
                     current_map = self._smooth_array(current_map, sigma)
 
-        avg_map_n = copy.copy(current_map)
-        var_map_n = Maps.zeros(self.n_voxels, Ni=self._Ni, Nj=self._Nj, Nk=self._Nk).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
+        avg_map = copy.copy(current_map)
+        var_map = Maps.zeros(self.n_voxels, Ni=self._Ni, Nj=self._Nj, Nk=self._Nk).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
 
         for k in range(2, self.n_maps+1):
             if verbose:
                 print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
-            avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
+            # avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
             current_map = self[k-1] if self.save_memory else self._maps_dense[:, :, :, k-1]
 
             if sigma != None:
@@ -1012,7 +1012,7 @@ class Maps:
                     current_map = self._smooth_array(current_map, sigma)
 
             # avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
-            avg_map_n = self._iterative_avg(k, avg_map_p, current_map)
+            avg_map = self._iterative_avg(k, avg_map, current_map)
 
             # if bias:
                 # if self.save_memory:
@@ -1026,13 +1026,13 @@ class Maps:
                 # else:
                 # var_map_n = (k-2)/(k-1)*var_map_p + self._power(avg_map_p - avg_map_n, 2) + 1./(k-1)*self._power(current_map-avg_map_n, 2)
 
-            var_map_n = self._iterative_var(k, var_map_p, avg_map_n, current_map, bias=bias)
+            var_map = self._iterative_var(k, var_map, avg_map, current_map, bias=bias)
 
         avg = Maps.copy_header(self)
         var = Maps.copy_header(self)
 
-        avg.maps = avg_map_n if self.save_memory else self.array_to_map(avg_map_n)
-        var.maps = var_map_n if self.save_memory else self.array_to_map(var_map_n)
+        avg.maps = avg_map if self.save_memory else self.array_to_map(avg_map)
+        var.maps = var_map if self.save_memory else self.array_to_map(var_map)
 
         if verbose:
             print('Iterative smooth avg var {} out of {}... Done'.format(self.n_maps, self.n_maps))
