@@ -760,7 +760,7 @@ class Maps:
             map_ids = [map_id]
 
         for k in map_ids:
-            if verbose: print('Smoothing {} out of {}.'.format(k+1, self.n_maps))
+            if verbose: print('Smoothing {} out of {}...'.format(k+1, self.n_maps), end='\r')
             array = self.to_array(k)
             array = self._smooth_array(array, sigma=sigma)
             lil_maps[:, k] = self._flatten_array(array, _2D=1)
@@ -771,6 +771,8 @@ class Maps:
         new_maps.maps = csr_maps
         if new_maps._has_atlas():
             new_maps._refresh_atlas_maps()
+
+        if verbose: print('Smoothing {} out of {}... Done'.format(self.n_maps, self.n_maps))
         return new_maps
 
     #_____________STATISTICS_____________#
