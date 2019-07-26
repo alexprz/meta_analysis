@@ -315,6 +315,15 @@ class Maps:
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
 
+    def _set_maps(self, maps, refresh_atlas_maps=True, refresh_dense_maps=True):
+        self._maps = maps
+
+        if refresh_atlas_maps:
+            self._refresh_atlas_maps()
+
+        if refresh_dense_maps and hasattr(self, '_save_memory') and not self._save_memory:
+            self._set_dense_maps()
+
     @property
     def n_voxels(self):
         return 0 if self._maps is None else self._maps.shape[0]
@@ -1043,8 +1052,11 @@ class Maps:
         avg = Maps.copy_header(self)
         var = Maps.copy_header(self)
 
-        avg.maps = avg_map if self.save_memory else self.array_to_map(avg_map)
-        var.maps = var_map if self.save_memory else self.array_to_map(var_map)
+        if not self.save_memory: avg_map = self.array_to_map(avg_map)
+        if not self.save_memory: var_map = self.array_to_map(var_map)
+        
+        avg._set_maps(avg_map, refresh_atlas_maps=False)
+        var._set_maps(var_map, refresh_atlas_maps=False)
 
         return avg, var
 
