@@ -920,7 +920,7 @@ class Maps:
             Returns:
                 (numpy.ndarray or scipy.sparse.csr_matrix) A 2D matrix (sparse or dense depending on sparse parameter) of shape (n_voxels, n_voxels) representing the covariance matrix.
         '''
-        if not self._has_atlas():
+        if atlas and not self._has_atlas():
             raise ValueError('No atlas. Must specify an atlas when initializing Maps or specify atlas=False in cov() function.')
 
         if not bias and self.n_maps <= 1:
