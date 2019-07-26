@@ -954,6 +954,17 @@ class Maps:
 
         return S, labels if atlas else S
 
+    @staticmethod
+    def _power(map, n):
+        if scipy.sparse.issparse(map):
+            return map.power(n)
+
+        elif isintance(map, numpy.ndarray):
+            return np.power(map, n)
+
+        else:
+            raise ValueError('Given map type not supported for power : {}'.format(type(map)))
+
 
     def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
@@ -989,16 +1000,16 @@ class Maps:
             avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
 
             if bias:
-                if self.save_memory:
-                    var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
-                else:
-                    var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*np.power(avg_map_p - avg_map_n, 2) + 1./(k)*np.power(current_map-avg_map_n, 2)
+                # if self.save_memory:
+                #     var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
+                # else:
+                var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*self._power(avg_map_p - avg_map_n, 2) + 1./(k)*self._power(current_map-avg_map_n, 2)
 
             else:
-                if self.save_memory:
-                    var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
-                else:
-                    var_map_n = (k-2)/(k-1)*var_map_p + np.power(avg_map_p - avg_map_n, 2) + 1./(k-1)*np.power(current_map-avg_map_n, 2)
+                # if self.save_memory:
+                    # var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
+                # else:
+                var_map_n = (k-2)/(k-1)*var_map_p + self._power(avg_map_p - avg_map_n, 2) + 1./(k-1)*self._power(current_map-avg_map_n, 2)
 
         avg = Maps.copy_header(self)
         var = Maps.copy_header(self)
