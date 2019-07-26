@@ -5,7 +5,7 @@ from nilearn import plotting
 import matplotlib
 matplotlib.use('TkAgg')
 
-def plot_activity_map(stat_img, threshold=0., glass_brain=False):
+def plot_activity_map(stat_img, threshold=0., glass_brain=False, title=None):
     '''
         Plot stat_img on MNI152 background
 
@@ -13,9 +13,9 @@ def plot_activity_map(stat_img, threshold=0., glass_brain=False):
         threshold : min value to display (in percent of maximum)
     '''
     if glass_brain:
-        display = plotting.plot_glass_brain(stat_img, black_bg=True, threshold=threshold)#*np.max(stat_img.get_data()))#, threshold=threshold)#threshold*np.max(stat_img.get_data()))
+        display = plotting.plot_glass_brain(stat_img, black_bg=True, threshold=threshold, title=title)
     else:
-        display = plotting.plot_stat_map(stat_img, black_bg=True, threshold=threshold)#*np.max(stat_img.get_data()))#, threshold=threshold)#threshold*np.max(stat_img.get_data()))
+        display = plotting.plot_stat_map(stat_img, black_bg=True, threshold=threshold, title=title)
 
     return display
 
