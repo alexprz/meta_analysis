@@ -442,8 +442,31 @@ class Maps:
     def _has_mask(self):
         return self._mask is not None and isinstance(self._mask, nib.Nifti1Image)
 
-    def _get_maps(self, atlas):
-        return self._maps_atlas if atlas else self._maps
+    def _get_maps(self, map_id=None, atlas=False, dense=False):
+
+        if atlas and dense:
+            raise ValueError('No dense maps for atlas.')
+
+        if map_id is None:
+            if atlas:
+                return self._maps_atlas
+            
+            elif dense:
+                return self._maps_dense
+
+            else:
+                return self._maps
+
+        else:
+            if atlas:
+                return self._maps_atlas[:, map_id]
+            
+            elif dense:
+                return self._maps_dense[:, :, :, map_id]
+
+            else:
+                return self._maps[:, map_id]
+
 
     def _set_dense_maps(self):
         if self._maps is None:
@@ -744,6 +767,17 @@ class Maps:
         map = Maps.array_to_map(array)
         return map
 
+    @staticmethod
+    def _smooth(data, sigma, Ni=None, Nj=None, Nk=None):
+        if sigma is None:
+            return data
+
+        if isinstance(data, np.ndarray):
+            return Maps._smooth_array(data, sigma)
+
+        elif scipy.sparse.issparse(data):
+            return Maps._smooth_map(data, sigma, Ni, Nj, Nk)
+
     def smooth(self, sigma, map_id=None, inplace=False, verbose=False):
         '''
             Convolve chosen maps with gaussian kernel.
@@ -989,43 +1023,25 @@ class Maps:
         if not compute_var:
             return self.avg().smooth(sigma=sigma), None
 
-        current_map = self[0] if self.save_memory else self._maps_dense[:, :, :, 0]
-        if sigma != None:
-                if self.save_memory:
-                    current_map = self._smooth_map(current_map, sigma, self._Ni, self._Nj, self._Nk)
-                else:
-                    current_map = self._smooth_array(current_map, sigma)
+        # current_map = self[0] if self.save_memory else self._maps_dense[:, :, :, 0]
+
+        current_map = self._get_maps(map_id=0, atlas=False, dense=not self.save_memory)
+        
+        current_map = self._smooth(current_map, sigma, self._Ni, self._Nj, self._Nk)
 
         avg_map = copy.copy(current_map)
         var_map = Maps.zeros(self.n_voxels, Ni=self._Ni, Nj=self._Nj, Nk=self._Nk).maps if self.save_memory else np.zeros((self._Ni, self._Nj, self._Nk))
 
         for k in range(2, self.n_maps+1):
-            if verbose:
-                print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
-            # avg_map_p, var_map_p = copy.copy(avg_map_n), copy.copy(var_map_n)
-            current_map = self[k-1] if self.save_memory else self._maps_dense[:, :, :, k-1]
+            if verbose: print('Iterative smooth avg var {} out of {}...'.format(k, self.n_maps), end='\r', flush=True)
 
-            if sigma != None:
-                if self.save_memory:
-                    current_map = self._smooth_map(current_map, sigma, self._Ni, self._Nj, self._Nk)
-                else:
-                    current_map = self._smooth_array(current_map, sigma)
+            # current_map = self[k-1] if self.save_memory else self._maps_dense[:, :, :, k-1]
 
-            # avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
+            current_map = self._get_maps(map_id=k-1, atlas=False, dense=not self.save_memory)
+
+            current_map = self._smooth(current_map, sigma, self._Ni, self._Nj, self._Nk)
+
             avg_map = self._iterative_avg(k, avg_map, current_map)
-
-            # if bias:
-                # if self.save_memory:
-                #     var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
-                # else:
-                # var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*self._power(avg_map_p - avg_map_n, 2) + 1./(k)*self._power(current_map-avg_map_n, 2)
-
-            # else:
-                # if self.save_memory:
-                    # var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
-                # else:
-                # var_map_n = (k-2)/(k-1)*var_map_p + self._power(avg_map_p - avg_map_n, 2) + 1./(k-1)*self._power(current_map-avg_map_n, 2)
-
             var_map = self._iterative_var(k, var_map, avg_map, current_map, bias=bias)
 
         avg = Maps.copy_header(self)
@@ -1034,8 +1050,7 @@ class Maps:
         avg.maps = avg_map if self.save_memory else self.array_to_map(avg_map)
         var.maps = var_map if self.save_memory else self.array_to_map(var_map)
 
-        if verbose:
-            print('Iterative smooth avg var {} out of {}... Done'.format(self.n_maps, self.n_maps))
+        if verbose: print('Iterative smooth avg var {} out of {}... Done'.format(self.n_maps, self.n_maps))
 
         return avg, var
 
