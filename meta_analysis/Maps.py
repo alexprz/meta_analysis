@@ -962,13 +962,24 @@ class Maps:
         if scipy.sparse.issparse(map):
             return map.power(n)
 
-        elif isintance(map, numpy.ndarray):
+        elif isinstance(map, np.ndarray):
             return np.power(map, n)
 
         else:
             raise ValueError('Given map type not supported for power : {}'.format(type(map)))
 
+    @staticmethod
+    def _iterative_avg(k, previous_avg, new_value):
+        return 1./k*((k-1)*previous_avg + new_value)
 
+    @staticmethod
+    def _iterative_var(k, previous_var, new_avg, new_value, bias=False):
+        if bias:
+            return (k-1)/(k)*previous_var + 1./(k*(k-1))*Maps._power(new_avg - new_value, 2) + 1./(k)*Maps._power(new_value - new_avg, 2)
+        else:
+            return (k-2)/(k-1)*previous_var + 1./((k-1)**2)*Maps._power(new_avg - new_value, 2) + 1./(k-1)*Maps._power(new_value - new_avg, 2)
+
+    # @profile
     def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
@@ -1000,19 +1011,22 @@ class Maps:
                 else:
                     current_map = self._smooth_array(current_map, sigma)
 
-            avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
+            # avg_map_n = 1./k*((k-1)*avg_map_p + current_map)
+            avg_map_n = self._iterative_avg(k, avg_map_p, current_map)
 
-            if bias:
+            # if bias:
                 # if self.save_memory:
                 #     var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*(avg_map_p - avg_map_n).power(2) + 1./(k)*(current_map-avg_map_n).power(2)
                 # else:
-                var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*self._power(avg_map_p - avg_map_n, 2) + 1./(k)*self._power(current_map-avg_map_n, 2)
+                # var_map_n = (k-1)/(k)*var_map_p + (k-1)/(k)*self._power(avg_map_p - avg_map_n, 2) + 1./(k)*self._power(current_map-avg_map_n, 2)
 
-            else:
+            # else:
                 # if self.save_memory:
                     # var_map_n = (k-2)/(k-1)*var_map_p + (avg_map_p - avg_map_n).power(2) + 1./(k-1)*(current_map-avg_map_n).power(2)
                 # else:
-                var_map_n = (k-2)/(k-1)*var_map_p + self._power(avg_map_p - avg_map_n, 2) + 1./(k-1)*self._power(current_map-avg_map_n, 2)
+                # var_map_n = (k-2)/(k-1)*var_map_p + self._power(avg_map_p - avg_map_n, 2) + 1./(k-1)*self._power(current_map-avg_map_n, 2)
+
+            var_map_n = self._iterative_var(k, var_map_p, avg_map_n, current_map, bias=bias)
 
         avg = Maps.copy_header(self)
         var = Maps.copy_header(self)
