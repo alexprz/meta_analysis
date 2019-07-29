@@ -134,3 +134,64 @@ class SumTestCase(unittest.TestCase):
         maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk, mask=self.mask)
         self.assertTrue(np.array_equal(maps2.sum(axis=0), self.expected_masked2))
         self.assertTrue(np.array_equal(maps2.sum(), 20.))
+
+class IterativeVsManual(unittest.TestCase):
+    def setUp(self):
+        self.array = np.array([[[1, 2, 3],
+                                [4, 5, 6],
+                                [7, 8, 9]]])
+
+        self.array2 = np.array([[[[1, 9], [2, 8], [3, 7]],
+                                 [[4, 6], [5, 5], [6, 4]],
+                                 [[7, 3], [8, 2], [9, 1]]]])
+
+        self.mask_data = np.array([[[0, 0, 1],
+                                    [0, 1, 0],
+                                    [0, 0, 0]]])
+
+        self.mask = nib.Nifti1Image(self.mask_data, affine)
+        
+        self.expected0 = 45.
+        self.expected1 = np.array([[45]])
+        self.expected2 = np.array([[45, 45]])
+
+        self.expected_masked1 = np.array([[8]])
+        self.expected_masked2 = np.array([[8, 12]])
+        
+        self.Ni, self.Nj, self.Nk = self.mask_data.shape
+
+    def test_avg_two_maps_biased(self):
+        maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        
+        sigma = 2.
+        avg, _ = maps2.iterative_smooth_avg_var(sigma=sigma, bias=True)
+        maps2.smooth(sigma=sigma, inplace=True)
+
+        self.assertTrue(np.array_equal(maps2.avg().to_array(), avg.to_array()))
+
+    def test_avg_two_maps_unbiased(self):
+        maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        
+        sigma = 2.
+        avg, _ = maps2.iterative_smooth_avg_var(sigma=sigma, bias=False)
+        maps2.smooth(sigma=sigma, inplace=True)
+
+        self.assertTrue(np.array_equal(maps2.avg().to_array(), avg.to_array()))
+
+    def test_var_two_maps_biased(self):
+        maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        
+        sigma = 2.
+        _, var = maps2.iterative_smooth_avg_var(sigma=sigma, bias=True)
+        maps2.smooth(sigma=sigma, inplace=True)
+
+        self.assertTrue(np.array_equal(maps2.var(bias=True).to_array(), var.to_array()))
+
+    def test_var_two_maps_unbiased(self):
+        maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        
+        sigma = 2.
+        _, var = maps2.iterative_smooth_avg_var(sigma=sigma, bias=False)
+        maps2.smooth(sigma=sigma, inplace=True)
+
+        self.assertTrue(np.array_equal(maps2.var(bias=False).to_array(), var.to_array()))
