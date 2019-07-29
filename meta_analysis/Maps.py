@@ -793,6 +793,7 @@ class Maps:
         elif scipy.sparse.issparse(data):
             return Maps._smooth_map(data, sigma, Ni, Nj, Nk)
 
+    @profile
     def smooth(self, sigma, map_id=None, inplace=False, verbose=False):
         '''
             Convolve chosen maps with gaussian kernel.
@@ -804,27 +805,32 @@ class Maps:
                 verbose (bool, optional): If True print logs.
 
         '''
-        lil_maps = scipy.sparse.lil_matrix(self.maps)
-
         if map_id is None:
             map_ids = range(self.n_maps)
         else:
             map_ids = [map_id]
 
-        for k in map_ids:
-            if verbose: print('Smoothing {} out of {}...'.format(k+1, self.n_maps), end='\r')
-            array = self.to_array(k)
-            array = self._smooth_array(array, sigma=sigma)
-            lil_maps[:, k] = self._flatten_array(array, _2D=1)
+        csc_matrices = []
 
-        csr_maps = scipy.sparse.csr_matrix(lil_maps)
+        for k in map_ids:
+            print_percent(k, self.n_maps, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
+
+            if not self.save_memory:
+                array = self._get_maps(map_id=k, dense=True)
+            else:
+                array = self.to_array(k)
+
+            array_smoothed = gaussian_filter(array, sigma=sigma)
+            array_smoothed = self._flatten_array(array_smoothed, _2D=1)
+            matrix = scipy.sparse.csc_matrix(array_smoothed)
+            csc_matrices.append(matrix)
+
+        csr_maps = scipy.sparse.hstack(csc_matrices)
+        csr_maps = scipy.sparse.csr_matrix(csr_maps)
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = csr_maps
-        if new_maps._has_atlas():
-            new_maps._refresh_atlas_maps()
 
-        if verbose: print('Smoothing {} out of {}... Done'.format(self.n_maps, self.n_maps))
         return new_maps
 
     #_____________STATISTICS_____________#
