@@ -835,10 +835,7 @@ class Maps:
             Args:
                 atlas (bool, optional): If True, the atlas maps are considered.
         '''
-        maps = self._get_maps(atlas=atlas)
-
-        e = scipy.sparse.csr_matrix(np.ones(maps.shape[0]))
-        return np.array(e.dot(maps).toarray()[0])
+        return self.sum(atlas=atlas, axis=0, keepdims=True).reshape(-1)
 
     def max(self, atlas=False, **kwargs):
         '''
@@ -851,12 +848,13 @@ class Maps:
                 (numpy.ndarray) 2D numpy array
         '''
         maps = self._get_maps(atlas=atlas)
-        max = maps.max(**kwargs)
+
+        max = copy.copy(maps).max(**kwargs)
         if isinstance(max, scipy.sparse.coo.coo_matrix):
             max = max.toarray()
         return max
 
-    def sum(self, atlas=False, **kwargs):
+    def sum(self, atlas=False, axis=None, keepdims=False):
         '''
             Compute the sum. axis=None: element-wise, axis=0: maps-wise, axis=1: voxels/labels-wise.
 
@@ -867,10 +865,20 @@ class Maps:
                 (numpy.ndarray) 2D numpy array
         '''
         maps = self._get_maps(atlas=atlas)
-        sum = maps.sum(**kwargs)
-        if isinstance(sum, scipy.sparse.coo.coo_matrix):
-            sum = sum.toarray()
-        return sum
+
+        e1 = scipy.sparse.csr_matrix(np.ones((1, maps.shape[0])))
+        e2 = scipy.sparse.csr_matrix(np.ones((maps.shape[1], 1)))
+
+        if axis is None or axis == 0:
+            maps = e1.dot(maps)
+
+        if axis is None or axis == 1:
+            maps = maps.dot(e2)
+
+        if axis not in [None, 0, 1]:
+            raise ValueError('Axis must be None, 0 or 1.')
+
+        return np.array(maps.toarray()) if keepdims else np.squeeze(np.array(maps.toarray()))
 
     def summed_map(self):
         '''
@@ -880,9 +888,7 @@ class Maps:
                 (Maps) New Maps instance containing the summed map.
         '''
         sum_map = Maps.copy_header(self)
-        sum_map.maps = scipy.sparse.csr_matrix(self.sum(axis=1))
-        if self._has_atlas():
-            sum_map._maps_atlas = scipy.sparse.csr_matrix(self.sum(atlas=True, axis=1))
+        sum_map.maps = scipy.sparse.csr_matrix(self.sum(axis=1, keepdims=True))
 
         return sum_map
 

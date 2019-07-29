@@ -117,22 +117,22 @@ class SumTestCase(unittest.TestCase):
 
     def test_one_map(self):
         maps = Maps(self.array, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
-        self.assertTrue(np.array_equal(maps.sum(axis=0), self.expected1))
+        self.assertTrue(np.array_equal(maps.sum(axis=0, keepdims=True), self.expected1))
         self.assertTrue(np.array_equal(maps.sum(), self.expected0))
 
     def test_two_maps(self):
         maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
-        self.assertTrue(np.array_equal(maps2.sum(axis=0), self.expected2))
+        self.assertTrue(np.array_equal(maps2.sum(axis=0, keepdims=True), self.expected2))
         self.assertTrue(np.array_equal(maps2.sum(), 2*self.expected0))
 
     def test_one_map_masked(self):
         maps = Maps(self.array, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk, mask=self.mask)
-        self.assertTrue(np.array_equal(maps.sum(axis=0), self.expected_masked1))
+        self.assertTrue(np.array_equal(maps.sum(axis=0, keepdims=True), self.expected_masked1))
         self.assertTrue(np.array_equal(maps.sum(), 8.))
 
     def test_two_maps_masked(self):
         maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk, mask=self.mask)
-        self.assertTrue(np.array_equal(maps2.sum(axis=0), self.expected_masked2))
+        self.assertTrue(np.array_equal(maps2.sum(axis=0, keepdims=True), self.expected_masked2))
         self.assertTrue(np.array_equal(maps2.sum(), 20.))
 
 class IterativeVsManual(unittest.TestCase):
