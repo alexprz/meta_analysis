@@ -40,8 +40,7 @@ def threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, stats=['avg', 'var'], N_simulation
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''
     time0 = time()
-    nb_processes=1
-    # nb_processes=multiprocessing.cpu_count()//2
+    nb_processes=multiprocessing.cpu_count()//2
 
     kwargs = {
         'Ni': Ni,
