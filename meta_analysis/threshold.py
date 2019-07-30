@@ -1,3 +1,4 @@
+
 import multiprocessing
 from joblib import Parallel, delayed
 from time import time
@@ -7,10 +8,10 @@ from .globals import mem
 from .tools import print_percent
 from .Maps import Maps
 
-
-def simulate_maps(n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p, mask, var, cov):
+def simulate_maps(random_maps, n_peaks, n_maps, Ni, Nj, Nk, sigma, verbose, p, mask, var, cov):
     if (var, cov) == (False, False):
-        random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, 1, p=p)
+        # random_maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk).randomize(n_peaks, 1, p=p)
+        random_maps.randomize(n_peaks, 1, p=p, inplace=True)
         map = random_maps.avg()*(1./n_maps)
         map = map.smooth(sigma=sigma, inplace=True)
         return map.max(), None, None
@@ -26,20 +27,21 @@ def threshold_MC_pool(N_sim, kwargs):
         (Used for multiprocessing with joblib)
     '''
     avgs, vars, covs = np.zeros(N_sim), np.zeros(N_sim), np.zeros(N_sim)
-    
+    kwargs['random_maps'] = Maps(Ni=kwargs['Ni'], Nj=kwargs['Nj'], Nk=kwargs['Nk'])
     for k in range(N_sim):
+        print_percent(k, N_sim, string=f"Simulating map with {kwargs['n_peaks']} peaks : {{1}} out of {{2}} {{0}}%...", verbose=kwargs['verbose'], end='\r', rate=0)
         avgs[k], vars[k], covs[k] = simulate_maps(**kwargs)
-        print_percent(k, N_sim, prefix='Simulating map with {} peaks : '.format(kwargs['n_peaks']))
     
     return avgs, vars, covs
 
-# @mem.cache
+@mem.cache
 def threshold_MC(n_peaks, n_maps, Ni, Nj, Nk, stats=['avg', 'var'], N_simulations=5000, sigma=1., verbose=False, p=None, mask=None):
     '''
         Estimate threshold with Monte Carlo using multiprocessing thanks to joblib module
     '''
     time0 = time()
-    nb_processes=multiprocessing.cpu_count()//2
+    nb_processes=1
+    # nb_processes=multiprocessing.cpu_count()//2
 
     kwargs = {
         'Ni': Ni,

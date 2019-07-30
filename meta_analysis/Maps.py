@@ -17,7 +17,6 @@ from .tools import print_percent, index_3D_to_1D
 import multiprocessing
 from joblib import Parallel, delayed
 
-# @profile
 def compute_maps(df, **kwargs):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
@@ -62,7 +61,7 @@ def compute_maps(df, **kwargs):
 
     return scipy.sparse.csr_matrix(maps)
 
-# @mem.cache
+@mem.cache
 def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=False):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
@@ -804,27 +803,32 @@ class Maps:
                 verbose (bool, optional): If True print logs.
 
         '''
-        lil_maps = scipy.sparse.lil_matrix(self.maps)
-
         if map_id is None:
             map_ids = range(self.n_maps)
         else:
             map_ids = [map_id]
 
-        for k in map_ids:
-            if verbose: print('Smoothing {} out of {}...'.format(k+1, self.n_maps), end='\r')
-            array = self.to_array(k)
-            array = self._smooth_array(array, sigma=sigma)
-            lil_maps[:, k] = self._flatten_array(array, _2D=1)
+        csc_matrices = []
 
-        csr_maps = scipy.sparse.csr_matrix(lil_maps)
+        for k in map_ids:
+            print_percent(k, self.n_maps, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
+
+            if not self.save_memory:
+                array = self._get_maps(map_id=k, dense=True)
+            else:
+                array = self.to_array(k)
+
+            array_smoothed = gaussian_filter(array, sigma=sigma)
+            array_smoothed = self._flatten_array(array_smoothed, _2D=1)
+            matrix = scipy.sparse.csc_matrix(array_smoothed)
+            csc_matrices.append(matrix)
+
+        csr_maps = scipy.sparse.hstack(csc_matrices)
+        csr_maps = scipy.sparse.csr_matrix(csr_maps)
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = csr_maps
-        if new_maps._has_atlas():
-            new_maps._refresh_atlas_maps()
 
-        if verbose: print('Smoothing {} out of {}... Done'.format(self.n_maps, self.n_maps))
         return new_maps
 
     #_____________STATISTICS_____________#
@@ -1039,7 +1043,6 @@ class Maps:
         else:
             return (k-2)/(k-1)*previous_var + 1./((k-1)**2)*Maps._power(new_avg - new_value, 2) + 1./(k-1)*Maps._power(new_value - new_avg, 2)
 
-    # @profile
     def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
