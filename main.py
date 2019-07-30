@@ -3,68 +3,46 @@ import pandas as pd
 import copy
 import pickle
 import scipy
-
-import os
-here = os.path.dirname(os.path.abspath(__file__))
+import nilearn
 
 import meta_analysis
 from meta_analysis import threshold as thr
 from meta_analysis import plotting, Maps
 
-from globals import coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine, pickle_path, gray_mask
+from globals import coordinates, corpus_tfidf, Ni, Nj, Nk, affine, inv_affine, pickle_path, gray_mask, atlas, template
 from tools import build_activity_map_from_pmid, build_df_from_keyword, build_avg_map_corpus
 
-if __name__ == '__main__':
-    # Step 1 : Plot activity map from a given pmid
-    pmid = 16723214 
-    stat_img = build_activity_map_from_pmid(pmid, sigma=1.5)
-    # plotting.plot_activity_map(stat_img, glass_brain=True, threshold=0.)
+import matplotlib
+matplotlib.use('MacOsx')
+from matplotlib import pyplot as plt
 
-    # Step 2
+if __name__ == '__main__':
     keyword = 'prosopagnosia'
-    # keyword = 'memory'
-    # keyword = 'language'
-    # keyword = 'schizophrenia'
     sigma = 2.
     N_sim = 5
-    gray_mask_data = gray_mask.get_data()
 
     df = build_df_from_keyword(keyword)
     
-    maps_HD = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid', mask=gray_mask_data)
+    maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask, atlas=atlas)
     
+    print(maps)
 
-    avg, var = maps_HD.iterative_smooth_avg_var(sigma=sigma, verbose=True)
-    avg_img, var_img = avg.to_img(), var.to_img()
+    avg = maps.avg()
+    var = maps.var()
 
-    n_peaks = int(maps_HD.sum())
-    n_maps = maps_HD.n_maps
+    plotting.plot_activity_map(avg.to_img_atlas(), title='Avg atlas')
+    plotting.plot_activity_map(var.to_img_atlas(), title='Var atlas')
+    plt.show()
 
-    # print('Nb peaks : {}'.format(n_peaks))
-    # print('Nb maps : {}'.format(n_maps))
+    avg_smoothed, var_smoothed = maps.iterative_smooth_avg_var(sigma=sigma, verbose=True)
 
-    # with open("{}all_maps_avg_sigma_{}.pickle".format(pickle_path, sigma), 'rb') as file:
-    #     loaded_avg = pickle.load(file)
+    n_peaks = len(df.index)
+    threshold = thr.threshold_MC(n_peaks, maps.n_maps, maps._Ni, maps._Nj, maps._Nk, N_simulations=N_sim, sigma=sigma, verbose=True, mask=gray_mask)
 
-    # p = loaded_avg.normalize(inplace=True)
+    plotting.plot_activity_map(avg_smoothed.to_img(), title='Avg smoothed thresholded', threshold=threshold['avg'])
+    plotting.plot_activity_map(var_smoothed.to_img(), title='Var smoothed thresholded', threshold=threshold['var'])
+    plt.show()
 
-    thresholds = thr.threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, stats=['avg', 'var'], N_simulations=N_sim, sigma=sigma, verbose=True, mask=gray_mask_data)
-    # thresholds = thr.threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, stats=['avg', 'var'], N_simulations=N_sim, sigma=sigma, verbose=True, p=p)
-    # thresholds = thr.threshold_MC(n_peaks, n_maps, maps_HD.Ni, maps_HD.Nj, maps_HD.Nk, stats=['avg'], N_simulations=N_sim, sigma=sigma, verbose=True)
-
-    avg_threshold = thresholds['avg']
-    var_threshold = thresholds['var']
-
-    plotting.plot_activity_map(avg_img, glass_brain=False, threshold=avg_threshold)
-    plotting.plot_activity_map(var_img, glass_brain=False, threshold=var_threshold)
-
-
-    # # Step 3 : Covariance matrix between voxels
-    # maps_LD = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=5, groupby_col='pmid')
-    # maps_LD.smooth(sigma=sigma, verbose=True)
-    # cov_matrix = maps_LD.cov()
-    # print(cov_matrix)
-    # print(np.max(cov_matrix))
-    # print(scipy.stats.describe(cov_matrix, axis=None))
-    # plotting.plot_cov_matrix_brain(cov_matrix, maps_LD.Ni, maps_LD.Nj, maps_LD.Nk, maps_LD.affine, threshold=0.2)
-
+    cov, labels = maps.cov()
+    nilearn.plotting.plot_matrix(cov, labels=labels)
+    nilearn.plotting.show()

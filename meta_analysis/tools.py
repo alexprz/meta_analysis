@@ -1,7 +1,15 @@
 
-def print_percent(index, total, prefix='', rate=10000):
-    if (total//rate) == 0 or index % (total//rate) == 0:
-        print(prefix+str(round(100*index/total, 1))+'%')
+def print_percent(index, total, string='', rate=0.1, end='\r', last_end='\n', append_last_string=' Done', flush=True, verbose=True):
+    if not verbose:
+        return
+
+    period = int(rate*total/100)
+    if period == 0 or index % period == 0:
+        print(string.format(100*(index+1)/total, index+1, total), end=end, flush=flush)
+
+    if index == total-1:
+        print((string+append_last_string).format(100*(index+1)/total, index+1, total), end=last_end, flush=flush)
+
 
 def index_3D_to_1D(i, j, k, Ni, Nj, Nk):
     '''

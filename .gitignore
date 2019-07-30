@@ -6,3 +6,8 @@ cache_*
 /plot/*
 save
 doc/*/
+*.lprof
+*.prof
+.pytest_cache
+baseline
+.coverage*
