@@ -17,7 +17,6 @@ from .tools import print_percent, index_3D_to_1D
 import multiprocessing
 from joblib import Parallel, delayed
 
-# @profile
 def compute_maps(df, **kwargs):
     '''
         Given a list of pmids, builds their activity maps (flattened in 1D) on a LIL sparse matrix format.
@@ -62,7 +61,7 @@ def compute_maps(df, **kwargs):
 
     return scipy.sparse.csr_matrix(maps)
 
-# @mem.cache
+@mem.cache
 def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=False):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
@@ -793,7 +792,6 @@ class Maps:
         elif scipy.sparse.issparse(data):
             return Maps._smooth_map(data, sigma, Ni, Nj, Nk)
 
-    @profile
     def smooth(self, sigma, map_id=None, inplace=False, verbose=False):
         '''
             Convolve chosen maps with gaussian kernel.
@@ -1045,7 +1043,6 @@ class Maps:
         else:
             return (k-2)/(k-1)*previous_var + 1./((k-1)**2)*Maps._power(new_avg - new_value, 2) + 1./(k-1)*Maps._power(new_value - new_avg, 2)
 
-    # @profile
     def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
