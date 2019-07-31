@@ -644,6 +644,9 @@ class Maps:
         start = 1 if ignore_bg else 0
         label_range = range(start, self._atlas.n_labels)
 
+        if map_id is None and self.n_maps == 1:
+            map_id = 0
+
         if map_id is None:
             array = np.zeros((self._Ni, self._Nj, self._Nk, self.n_maps))
             
@@ -695,6 +698,16 @@ class Maps:
             self.maps = filter_matrix.dot(self.maps)
 
         self._mask = mask
+
+    def apply_atlas(self, atlas, inplace=False):
+        new_maps = self if inplace else copy.copy(self)
+        new_maps._atlas = Atlas(atlas)
+        # print(new_maps._atlas.data.shape)
+        # print(np.histogram(new_maps._atlas.data))
+        new_maps._build_atlas_filter_matrix()
+        new_maps._refresh_atlas_maps()
+
+        return new_maps
 
     def randomize(self, n_peaks, n_maps, p=None, override_mask=False, inplace=False):
         '''
