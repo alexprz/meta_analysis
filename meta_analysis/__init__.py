@@ -3,3 +3,5 @@
 '''
 
 from .Maps import Maps
+
+from .tools import print_percent
