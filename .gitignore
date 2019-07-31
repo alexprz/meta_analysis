@@ -1,13 +1,12 @@
 /venv/
-__pycache__
 line_profiler
-cache_*
 .hypothesis
 /plot/*
 save
 doc/*/
 *.lprof
 *.prof
-.pytest_cache
 baseline
 .coverage*
+*_cache*
+*cache_*
