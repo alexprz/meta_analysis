@@ -2,8 +2,10 @@ import numpy as np
 from matplotlib import pyplot as plt
 import seaborn as sns
 from nilearn import plotting
+
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('MacOsx')
+from matplotlib import pyplot as plt
 
 def plot_activity_map(stat_img, threshold=0., glass_brain=False, title=None):
     '''

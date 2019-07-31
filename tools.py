@@ -49,6 +49,7 @@ def build_activity_map_from_pmid(pmid, sigma=1):
 
     return nib.Nifti1Image(stat_img_data, affine)
 
+@mem.cache
 def build_df_from_keyword(keyword):
     nonzero_pmids = np.array([int(decode_pmid[index]) for index in corpus_tfidf[:, encode_feature[keyword]].nonzero()[0]])
     df = coordinates[coordinates['pmid'].isin(nonzero_pmids)]
