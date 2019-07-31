@@ -6,6 +6,7 @@ import scipy
 import nilearn
 from matplotlib import pyplot as plt
 import seaborn as sns
+import nibabel as nib
 
 import meta_analysis
 from meta_analysis import threshold as thr
@@ -21,10 +22,48 @@ if __name__ == '__main__':
     sigma = 2.
     N_sim = 5
 
+
     # df = build_df_from_keyword(keyword)
     
     # maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask, atlas=atlas)
+    # maps.smooth(sigma=sigma, inplace=True, verbose=True)
+
+    # null_atlas = {'maps': nib.Nifti1Image(np.zeros((Ni, Nj, Nk)), affine), 'labels': ['r0']}
+
+    # maps_atlas = maps.apply_atlas(null_atlas)
+    # img = maps_atlas.avg().to_img_atlas(ignore_bg=False)
+    # print(img.get_data().shape)
+    # plotting.plot_activity_map(img)
+    # plt.show()
+
+
+    # atlas_dict = {
+    #     'Harvard Oxford': nilearn.datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm'),
+    #     # 'Harvard Oxford 2': nilearn.datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm'),
+    #     'Harvard Oxford 3': nilearn.datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr50-2mm'),
+    #     # 'My atlas !': atlas_homemade,
+    #     'Null atlas': null_atlas,
+    # }
+
+    # criteria = [
+    #     pearson_distance
+    # ]
+
+
+
+    # benchmarks = benchmark(maps.avg(), atlas_dict, criteria, verbose=True)
+
+    # print(benchmarks)
+
+    # sns.catplot(x='Criterion', y='Value', hue='Atlas', data=benchmarks, height=6, kind="bar", palette="muted")
+    # plt.show()
+
+    # exit()
+
+    df = build_df_from_keyword(keyword)
     
+    maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask, atlas=atlas)
+    maps.smooth(sigma=sigma, inplace=True, verbose=True)
     # print(maps)
 
     # avg = maps.avg()
@@ -67,16 +106,16 @@ if __name__ == '__main__':
 
     from nilearn import datasets
 
-    adhd_dataset = datasets.fetch_adhd(n_subjects=20)
-    func_filenames = adhd_dataset.func
+    # adhd_dataset = datasets.fetch_adhd(n_subjects=20)
+    # func_filenames = adhd_dataset.func
 
-    print(func_filenames)
+    # print(func_filenames)
 
-    print('Loading files')
-    maps = Maps(func_filenames)
+    # print('Loading files')
+    # maps = Maps(func_filenames)
     from nilearn.decomposition import DictLearning, CanICA
 
-    n_components=3
+    n_components=5
 
     # dict_learn = DictLearning(n_components=n_components, smoothing_fwhm=6.,
     #                       memory="nilearn_cache", memory_level=2,
@@ -102,16 +141,29 @@ if __name__ == '__main__':
     # # print(imgs)
     # print('training')
     imgs = maps.to_img(sequence=True, verbose=True)
-    dict_learning.fit(imgs)
-    # canica.fit(imgs)
+    # dict_learning.fit(imgs)
+    canica.fit(imgs)
 
-    components_img = dict_learning.components_img_
+    # components_img = dict_learning.components_img_
     components_img = canica.components_img_
 
-    nilearn.plotting.plot_prob_atlas(components_img, view_type='filled_contours',
-                             title='CanICA')
-    nilearn.plotting.show()
+    print(components_img.shape)
 
+    # nilearn.plotting.plot_prob_atlas(components_img, view_type='filled_contours',
+    #                          title='CanICA')
+    # nilearn.plotting.show()
+
+    # print(components_img.get_fdata())
+    # print(np.histogram(components_img.get_fdata()))
+
+    maps_atlas_homemade = Maps(components_img, template=template)
+
+    atlas_homemade = maps_atlas_homemade.to_atlas(verbose=True)
+
+    print(atlas_homemade['maps'])
+
+    plotting.plot_activity_map(atlas_homemade['maps'])
+    # plt.show()
 
 
 
@@ -123,12 +175,17 @@ if __name__ == '__main__':
     # nilearn.plotting.plot_matrix(cov, labels=labels)
     # nilearn.plotting.show()
 
+    null_atlas = {'maps': nib.Nifti1Image(np.zeros((Ni, Nj, Nk)), affine), 'labels': ['r0']}
+
     atlas_dict = {
-        'Harvard Oxford': nilearn.datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm'),
-        'Harvard Oxford 2': nilearn.datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm'),
-        'Harvard Oxford 3': nilearn.datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr50-2mm'),
-        # 'AAL': datasets.fetch_atlas_pauli_2017(version='det')
+        'Harvard Oxford cort-maxprob-thr25-2mm': nilearn.datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm'),
+        # 'Harvard Oxford 2': nilearn.datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm'),
+        'Harvard Oxford cort-maxprob-thr50-2mm': nilearn.datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr50-2mm'),
+        'My atlas ! (CanICA-5components)': atlas_homemade,
+        # 'Null atlas': null_atlas,
     }
+
+    print(atlas_dict['Harvard Oxford']['labels'])
 
     criteria = [
         pearson_distance
@@ -138,5 +195,5 @@ if __name__ == '__main__':
 
     print(benchmarks)
 
-    sns.catplot(x='Criterion', y='Value', hue='Atlas', data=benchmarks, height=6, kind="bar", palette="muted")
+    sns.catplot(x='Criterion', y='Value', hue='Atlas', data=benchmarks, height=6, kind="bar", palette="muted", title='Atlas benchmark on \'{}\' keyword'.format(keyword))
     plt.show()

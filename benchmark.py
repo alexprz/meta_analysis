@@ -29,8 +29,8 @@ def goodness_of_fit_map(img_ref, img_obs, criterion):
     return criterion(array_ref, array_obs)
 
 def benchmark_atlas(maps, atlas, criterion, verbose=False):
-    maps_atlas = maps.apply_atlas(atlas, inplace=False)
-    return goodness_of_fit_map(maps.to_img(), maps_atlas.to_img_atlas(), criterion)
+    maps.apply_atlas(atlas, inplace=True)
+    return goodness_of_fit_map(maps.to_img(), maps.to_img_atlas(ignore_bg=True), criterion)
 
 def benchmark(maps, atlas_dict, criteria, verbose=False):
     

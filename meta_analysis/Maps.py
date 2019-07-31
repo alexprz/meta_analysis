@@ -308,6 +308,9 @@ class Maps:
 
     @maps.setter
     def maps(self, maps):
+        if not scipy.sparse.issparse(maps):
+            maps = scipy.sparse.csr_matrix(maps)
+
         self._maps = maps
         self._refresh_atlas_maps()
 
@@ -623,7 +626,7 @@ class Maps:
 
         return array
 
-    def to_array_atlas(self, map_id=None, ignore_bg=True):
+    def to_array_atlas(self, map_id=None, ignore_bg=True, background_label='Background'):
         '''
             Convert one atlas map into a 3D numpy.array.
 
@@ -641,8 +644,17 @@ class Maps:
         if not self._has_atlas():
             raise AttributeError('No atlas were given.')
 
-        start = 1 if ignore_bg else 0
-        label_range = range(start, self._atlas.n_labels)
+        # start = 1 if ignore_bg else 0
+        # label_range = range(start, self._atlas.n_labels)
+
+        label_range = list(range(self._atlas.n_labels))
+
+        # Delete background if any
+        try:
+            background_index = self._atlas.labels.index(background_label)
+            del label_range[background_index]
+        except ValueError: # no Background in labels
+            pass
 
         if map_id is None and self.n_maps == 1:
             map_id = 0
@@ -680,6 +692,35 @@ class Maps:
             data = scipy.sparse.csr_matrix(self.flatten_array(data, _2D=1))
 
         return self._atlas_filter_matrix.dot(data)
+
+    def to_atlas(self, verbose=False):
+        '''
+            Converts the maps into an atlas by creating a label for each different values.
+        
+            Returns:
+                (nibabel.Nifti1Image) Nifti1Image containing the atlas
+                () Labels of the regions
+        '''
+
+        array = self.to_array()
+
+        # print(np.histogram(array))
+        # print(np.unique(array))
+        # uniques = np.unique(array)
+        # n_tot = len(uniques)
+        array = np.concatenate((np.zeros(array.shape[:-1]+(1,)), array), axis=3)
+        array_atlas = np.argmax(array, axis=3)
+        # array_atlas = np.zeros(array.shape[:-1])
+
+        # # print(np.histogram(np.argmax(array, axis=3)))
+        
+        # for k in range(self.n_maps):
+        #     print_percent(k, self.n_maps, string='Converting to atlas label {1} out of {2} : {0:.2f}%...', rate=0, verbose=verbose)
+        #     array_atlas[array[:, :, :, k] > 0] = k+1
+
+
+        return {'maps': nib.Nifti1Image(array_atlas, self._affine), 'labels': ['Background']+['r{}'.format(k) for k in range(self.n_maps)]}
+
 
     #_____________PUBLIC_TOOLS_____________#
     def apply_mask(self, mask):
