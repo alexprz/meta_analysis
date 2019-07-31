@@ -587,7 +587,7 @@ class Maps:
 
         return self.map_to_array(maps, self._Ni, self._Nj, self._Nk)
 
-    def to_img(self, map_id=None):
+    def to_img(self, map_id=None, sequence=False, verbose=False):
         '''
             Convert one map into a nibabel.Nifti1Image.
 
@@ -604,6 +604,13 @@ class Maps:
         maps = self._maps
         if map_id is not None:
             maps = self._maps[:, map_id]
+
+        if sequence:
+            res = []
+            for k in range(maps.shape[1]):
+                print_percent(k, maps.shape[1], string='Converting {1} out of {2}, {0:.2f}%...', verbose=verbose, rate=0)
+                res.append(self.map_to_img(maps[:, k], self._Ni, self._Nj, self._Nk, self._affine))
+            return res
 
         return self.map_to_img(maps, self._Ni, self._Nj, self._Nk, self._affine)
 
@@ -808,20 +815,32 @@ class Maps:
         else:
             map_ids = [map_id]
 
-        csc_matrices = []
 
-        for k in map_ids:
-            print_percent(k, self.n_maps, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
+        def smooth_pool(map_ids, self, sigma):
 
-            if not self.save_memory:
-                array = self._get_maps(map_id=k, dense=True)
-            else:
-                array = self.to_array(k)
+            csc_matrices = []
+            n_tot = len(map_ids)
+            count = 0
+            for k in map_ids:
+                print_percent(count, n_tot, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
+                count += 1
+                
+                if not self.save_memory:
+                    array = self._get_maps(map_id=k, dense=True)
+                else:
+                    array = self.to_array(k)
 
-            array_smoothed = gaussian_filter(array, sigma=sigma)
-            array_smoothed = self._flatten_array(array_smoothed, _2D=1)
-            matrix = scipy.sparse.csc_matrix(array_smoothed)
-            csc_matrices.append(matrix)
+                array_smoothed = gaussian_filter(array, sigma=sigma)
+                array_smoothed = self._flatten_array(array_smoothed, _2D=1)
+                matrix = scipy.sparse.csc_matrix(array_smoothed)
+                csc_matrices.append(matrix)
+
+            return csc_matrices
+
+
+        nb_jobs=multiprocessing.cpu_count()//2
+        splitted_range= np.array_split(map_ids, nb_jobs)
+        csc_matrices = np.concatenate(Parallel(n_jobs=nb_jobs, backend='threading')(delayed(smooth_pool)(sub_array, self, sigma) for sub_array in splitted_range))
 
         csr_maps = scipy.sparse.hstack(csc_matrices)
         csr_maps = scipy.sparse.csr_matrix(csr_maps)
