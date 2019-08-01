@@ -609,11 +609,19 @@ class Maps:
             maps = self._maps[:, map_id]
 
         if sequence:
-            res = []
-            for k in range(maps.shape[1]):
-                print_percent(k, maps.shape[1], string='Converting {1} out of {2}, {0:.2f}%...', verbose=verbose, rate=0)
-                res.append(self.map_to_img(maps[:, k], self._Ni, self._Nj, self._Nk, self._affine))
-            return res
+
+            n_jobs = multiprocessing.cpu_count()//2
+            splitted_range = np.array_split(range(maps.shape[1]), n_jobs)            
+
+            def to_img_pool(maps_range):
+                res = []
+                n_tot = len(maps_range)
+                for i, k in enumerate(maps_range):
+                    print_percent(i, n_tot, string='Converting {1} out of {2}... {0:.2f}%', verbose=verbose, rate=0)
+                    res.append(self.map_to_img(maps[:, k], self._Ni, self._Nj, self._Nk, self._affine))
+                return res
+
+            return np.concatenate(Parallel(n_jobs=n_jobs, backend='threading')(delayed(to_img_pool)(sub_array) for sub_array in splitted_range))
 
         return self.map_to_img(maps, self._Ni, self._Nj, self._Nk, self._affine)
 
@@ -743,8 +751,6 @@ class Maps:
     def apply_atlas(self, atlas, inplace=False):
         new_maps = self if inplace else copy.copy(self)
         new_maps._atlas = Atlas(atlas)
-        # print(new_maps._atlas.data.shape)
-        # print(np.histogram(new_maps._atlas.data))
         new_maps._build_atlas_filter_matrix()
         new_maps._refresh_atlas_maps()
 

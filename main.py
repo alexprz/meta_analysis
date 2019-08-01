@@ -18,7 +18,9 @@ from tools import build_activity_map_from_pmid, build_df_from_keyword, build_avg
 from benchmark import benchmark, pearson_distance
 
 if __name__ == '__main__':
+    # keyword = 'bilinguals'
     keyword = 'language'
+    # keyword = 'prosopagnosia'
     sigma = 2.
     N_sim = 5
 
@@ -162,7 +164,7 @@ if __name__ == '__main__':
 
     print(atlas_homemade['maps'])
 
-    plotting.plot_activity_map(atlas_homemade['maps'])
+    # plotting.plot_activity_map(atlas_homemade['maps'], title='Generated')
     # plt.show()
 
 
@@ -178,14 +180,18 @@ if __name__ == '__main__':
     null_atlas = {'maps': nib.Nifti1Image(np.zeros((Ni, Nj, Nk)), affine), 'labels': ['r0']}
 
     atlas_dict = {
+        'Harvard Oxford cort-maxprob-thr0-2mm': nilearn.datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr0-2mm'),
         'Harvard Oxford cort-maxprob-thr25-2mm': nilearn.datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm'),
         # 'Harvard Oxford 2': nilearn.datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm'),
         'Harvard Oxford cort-maxprob-thr50-2mm': nilearn.datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr50-2mm'),
-        'My atlas ! (CanICA-5components)': atlas_homemade,
+        'Generated atlas (CanICA-{}components)'.format(n_components): atlas_homemade,
         # 'Null atlas': null_atlas,
     }
 
-    print(atlas_dict['Harvard Oxford']['labels'])
+    for name, atlas in atlas_dict.items():
+        plotting.plot_activity_map(atlas['maps'], title=name)
+
+    print(atlas_dict['Harvard Oxford cort-maxprob-thr25-2mm']['labels'])
 
     criteria = [
         pearson_distance
@@ -195,5 +201,8 @@ if __name__ == '__main__':
 
     print(benchmarks)
 
-    sns.catplot(x='Criterion', y='Value', hue='Atlas', data=benchmarks, height=6, kind="bar", palette="muted", title='Atlas benchmark on \'{}\' keyword'.format(keyword))
+    # fig, ax = plt.subplots()
+    # ax.set(yscale="log")
+    sns.catplot(x='Criterion', y='Value', hue='Atlas', data=benchmarks, height=6, kind="bar", palette="muted").set(yscale="log")
+    plt.title('Atlas benchmark on \'{}\' keyword'.format(keyword))
     plt.show()
