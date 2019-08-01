@@ -434,7 +434,7 @@ class Maps:
 
         for k in range(self._atlas.n_labels):
             row = atlas_data == k
-            filter_matrix[k, row] = 1
+            filter_matrix[k, row] = 1/np.sum(row)
 
         return scipy.sparse.csr_matrix(filter_matrix)
 
