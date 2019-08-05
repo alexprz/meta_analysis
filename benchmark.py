@@ -9,6 +9,12 @@ from meta_analysis import Maps, plotting, print_percent
 
 from tools import build_df_from_keyword
 from globals import template, gray_mask
+from clustering import fit_CanICA, fit_DictLearning, fit_Kmeans, fit_Wards, fit_GroupICA
+
+#_________ATLASES_________#
+atlas_HO_0 = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm')
+atlas_HO_25 = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
+atlas_HO_50 = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr50-2mm')
 
 #_________CRITERIA_________#
 def pearson_distance(array_ref, array_obs, **kwargs):
@@ -59,38 +65,45 @@ def benchmark(maps, atlas_dict, criteria, verbose=False, **kwargs):
 
 
 if __name__ == '__main__':
-    keyword = 'language'
+    keyword = 'prosopagnosia'
     sigma = 2.
 
     df = build_df_from_keyword(keyword)
     maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask, verbose=True)
 
+    #Build custom atlases
+    n_components = 50
+    tag = 1
+    params = {
+        'n_components':  n_components,
+        'memory': "nilearn_cache",
+        'memory_level': 2,
+        'threshold': 3.,
+        'n_init': 1,
+        'verbose': 1,
+        'mask_strategy': 'template',
+        'n_jobs': -2
+    }
+
+    imgs = maps.to_img(sequence=True, verbose=True)
+    
+    CanICA_imgs = fit_CanICA(imgs, params, tag=tag).components_img_
+    atlas_CanICA = Maps(CanICA_imgs, template=template).to_atlas(verbose=True)
+
     atlas_dict = {
-        'Harvard Oxford': datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm'),
-        'Harvard Oxford 2': datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm'),
-        'Harvard Oxford 3': datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr50-2mm'),
+        'Harvard Oxford 0': atlas_HO_0,
+        'Harvard Oxford 25': atlas_HO_25,
+        'Harvard Oxford 50': atlas_HO_50,
+        'CanICA {components}': atlas_CanICA,
     }
 
     criteria = [
-        pearson_distance,
-        RMS,
-        Mahalanobis
+        pearson_distance
     ]
 
-    # print(type(maps._maps.toarray()[0, 0]))
-
-    # array = np.zeros((maps.n_voxels, maps.n_maps), dtype=np.float32)
-    # print(array.shape)
-    # # print(type(maps._maps.toarray()[0, 0]))
-    # maps._maps.toarray(out=array)
-
-    # print(type(array[0, 0]))
-
-    # exit()
-
-    S = maps.cov(atlas=False, shrink='LW', ignore_bg=True, verbose=True)
-    benchmarks = benchmark(maps.avg(), atlas_dict, criteria, verbose=True, S=S)
+    benchmarks = benchmark(maps.avg(), atlas_dict, criteria, verbose=True)
     
     print(benchmarks)
-    sns.catplot(x='Criterion', y='Value', hue='Atlas', data=benchmarks, height=6, kind="bar", palette="muted")
+    sns.catplot(x='Criterion', y='Value', hue='Atlas', data=benchmarks, height=6, kind="bar", palette="muted").set(yscale="log")
+    plt.title('Atlas benchmark on \'{}\' keyword'.format(keyword))
     plt.show()

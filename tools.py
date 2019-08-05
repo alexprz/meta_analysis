@@ -2,6 +2,9 @@ import numpy as np
 import nibabel as nib
 import copy
 from scipy.ndimage import gaussian_filter
+import time
+import pickle
+import os
 
 from globals import mem, input_path, Ni, Nj, Nk, coordinates, affine, inv_affine, corpus_tfidf, gray_mask
 from meta_analysis import Maps
@@ -63,3 +66,29 @@ def build_avg_map_corpus(sigma):
     all_maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, reduce=1, groupby_col='pmid', mask=gray_mask.get_data())
 
     return all_maps.avg().smooth(sigma=sigma, inplace=True)
+
+#_________SAVING_TOOLS_________#
+def get_dump_token(prefix, tag=None, ext=None):
+    suffix = str(tag)
+
+    if tag is None: suffix = time.strftime("%Y%m%d-%H%M%S")
+    if ext is not None: suffix += '.'+ext
+    
+    return prefix+suffix
+
+def dump(obj, filename, save=True):
+    if save:
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, 'wb') as file:
+            pickle.dump(obj, file)
+    return obj
+
+def load(filename, verbose=True):
+    try:
+        with open(filename, 'rb') as file:
+            obj = pickle.load(file)
+        if verbose: print('[Pickle] {} loaded succesfully.'.format(filename))
+        return obj
+    except:
+        if verbose: print('[Pickle] No file loaded.')
+        return None
