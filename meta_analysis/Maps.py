@@ -36,6 +36,7 @@ def compute_maps(df, **kwargs):
     n_maps = kwargs['n_maps']
     mask = kwargs['mask']
     verbose = kwargs['verbose']
+    dtype = kwargs['dtype']
 
     col_names = kwargs['col_names']
     groupby_col = col_names['groupby']
@@ -44,7 +45,7 @@ def compute_maps(df, **kwargs):
     z_col = col_names['z']
     weight_col = col_names['weight']
 
-    maps = scipy.sparse.lil_matrix((n_maps, Ni*Nj*Nk))
+    maps = scipy.sparse.lil_matrix((n_maps, Ni*Nj*Nk), dtype=dtype)
 
     n_tot = df.shape[0]
     for i_row, row in enumerate(zip(df[groupby_col], df[x_col], df[y_col], df[z_col], df[weight_col])):
@@ -61,8 +62,8 @@ def compute_maps(df, **kwargs):
 
     return scipy.sparse.csr_matrix(maps)
 
-@mem.cache
-def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=False):
+# @mem.cache
+def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=False, dtype=np.float32):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
@@ -89,7 +90,7 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
     index_dict = {k:v for v, k in enumerate(unique_pmid)}
 
     # LIL format allows faster incremental construction of sparse matrix
-    maps = scipy.sparse.csr_matrix((n_maps, Ni*Nj*Nk))
+    maps = scipy.sparse.csr_matrix((n_maps, Ni*Nj*Nk), dtype=dtype)
 
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()//2
@@ -104,7 +105,8 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
         'n_maps': n_maps,
         'col_names': col_names,
         'mask': None if mask is None else mask.get_fdata(),
-        'verbose': verbose
+        'verbose': verbose,
+        'dtype': dtype
     }
     
     results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
@@ -117,7 +119,7 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
     
     return maps
 
-def build_maps_from_img(img):
+def build_maps_from_img(img, dtype=np.float32):
     img = nilearn.image.load_img(img)
     n_dims = len(img.get_data().shape)
 
@@ -131,18 +133,22 @@ def build_maps_from_img(img):
     else:
         raise ValueError('Image not supported. Must be a 3D or 4D image.')
 
-    data = Maps.flatten_array(img.get_data(), _2D=n_maps)
+    data = Maps.flatten_array(img.get_data(), _2D=n_maps).astype(dtype)
     maps = scipy.sparse.csr_matrix(data)
 
     return maps, Ni, Nj, Nk, img.affine
 
 class Atlas:
-    def __init__(self, atlas):
+    def __init__(self, atlas=None, bg_label='Background'):
         self.atlas = None
         self.atlas_img = None
         self.data = None
         self.labels = None
         self.n_labels = None
+        self.bg_label = bg_label
+        self.bg_index = None
+        self.labels_without_bg = None
+        self.labels_range_without_bg = None
 
         if atlas is None:
             return
@@ -151,8 +157,62 @@ class Atlas:
         self.atlas_img = nilearn.image.load_img(atlas['maps'])
         self.data = self.atlas_img.get_fdata()
         self.labels = atlas['labels']
+        self.labels_range = list(range(len(self.labels)))
         self.n_labels = len(self.labels)
 
+        self.set_bg_labels(bg_label)
+
+    def has_background(self):
+        return self.bg_index is not None
+
+    def get_labels(self, ignore_bg=False, bg_label=None):
+        labels, labels_without_bg = self.labels, self.labels_without_bg
+        
+        if bg_label is not None:
+            _, labels_without_bg, _ = self.get_bg_labels(bg_label)
+
+        if not ignore_bg:
+            return labels
+
+        if self.has_background():
+            return labels_without_bg
+
+        print('No background label found in given atlas (searched for \'{}\'). Consider specifying background label. ignore_bg ignored'.format(bg_label))
+        return labels
+
+    def get_labels_range(self, ignore_bg=False, bg_label=None):
+        labels_range, labels_range_without_bg = self.labels_range, self.labels_range_without_bg
+        
+        if bg_label is not None:
+            _, _, labels_range_without_bg = self.get_bg_labels(bg_label)
+
+        if not ignore_bg:
+            return labels_range
+
+        if self.has_background():
+            return labels_range_without_bg
+
+        print('No background label found in given atlas (searched for \'{}\'). Consider specifying background label. ignore_bg ignored'.format(bg_label))
+        return labels_range
+
+    def set_bg_labels(self, bg_label):
+        self.bg_index, self.labels_without_bg, self.labels_range_without_bg = self.get_bg_labels(bg_label)
+
+    def get_bg_labels(self, bg_label):
+
+        try:
+            bg_index = self.labels.index(bg_label)
+
+            labels_without_bg = copy.copy(self.labels)
+            labels_range_without_bg = copy.copy(self.labels_range)
+
+            del labels_without_bg[bg_index]
+            del labels_range_without_bg[bg_index]
+
+        except ValueError:
+            bg_index, labels_without_bg, labels_range_without_bg = None, None, None
+
+        return bg_index, labels_without_bg, labels_range_without_bg
 
 class Maps:
     def __init__(self, df=None,
@@ -167,7 +227,8 @@ class Maps:
                        z_col='z',
                        weight_col='weight',
                        save_memory=True,
-                       verbose=False
+                       verbose=False,
+                       dtype=np.float64
                        ):
         '''
 
@@ -215,6 +276,7 @@ class Maps:
         self._maps_dense =  None
         self._maps_atlas = None
         self._atlas_filter_matrix = None
+        self._dtype = dtype
 
 
         if isinstance(df, pd.DataFrame):
@@ -232,25 +294,25 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, verbose)
+            self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, verbose, self._dtype)
 
         elif isinstance(df, nib.Nifti1Image) or isinstance(df, str) or isinstance(df, list):
-            self._maps, Ni, Nj, Nk, affine = build_maps_from_img(df)
+            self._maps, Ni, Nj, Nk, affine = build_maps_from_img(df, dtype=self._dtype)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 2:
-            self._maps = scipy.sparse.csr_matrix(df)
+            self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 3:
-            self._maps = scipy.sparse.csr_matrix(self._flatten_array(df, _2D=1))
+            self._maps = scipy.sparse.csr_matrix(self._flatten_array(df, _2D=1), dtype=self._dtype)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 4:
-            self._maps = scipy.sparse.csr_matrix(df.reshape((-1, df.shape[-1]), order='F'))
+            self._maps = scipy.sparse.csr_matrix(df.reshape((-1, df.shape[-1]), order='F'), dtype=self._dtype)
 
         elif isinstance(df, tuple):
-            self._maps = scipy.sparse.csr_matrix(df)
+            self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, int):
-            self._maps = scipy.sparse.csr_matrix((df, 1))
+            self._maps = scipy.sparse.csr_matrix((df, 1), dtype=self._dtype)
 
         elif df is None:
             self._maps = None
@@ -311,14 +373,14 @@ class Maps:
         if not scipy.sparse.issparse(maps):
             maps = scipy.sparse.csr_matrix(maps)
 
-        self._maps = maps
+        self._maps = maps.astype(self._dtype)
         self._refresh_atlas_maps()
 
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
 
     def _set_maps(self, maps, refresh_atlas_maps=True, refresh_dense_maps=True):
-        self._maps = maps
+        self._maps = maps.astype(self._dtype)
 
         if refresh_atlas_maps:
             self._refresh_atlas_maps()
@@ -634,7 +696,7 @@ class Maps:
 
         return array
 
-    def to_array_atlas(self, map_id=None, ignore_bg=True, background_label='Background'):
+    def to_array_atlas(self, map_id=None, ignore_bg=True, bg_label=None):
         '''
             Convert one atlas map into a 3D numpy.array.
 
@@ -655,14 +717,17 @@ class Maps:
         # start = 1 if ignore_bg else 0
         # label_range = range(start, self._atlas.n_labels)
 
-        label_range = list(range(self._atlas.n_labels))
+        # label_range = self._atlas.labels_range_without_bg if ignore_bg and self._atlas.has_background() else self._atlas.label_range
+        
+        label_range = self._atlas.get_labels_range(ignore_bg=ignore_bg, bg_label=bg_label)
+        # label_range = list(range(self._atlas.n_labels))
 
         # Delete background if any
-        try:
-            background_index = self._atlas.labels.index(background_label)
-            del label_range[background_index]
-        except ValueError: # no Background in labels
-            pass
+        # try:
+        #     background_index = self._atlas.labels.index(background_label)
+        #     del label_range[background_index]
+        # except ValueError: # no Background in labels
+        #     pass
 
         if map_id is None and self.n_maps == 1:
             map_id = 0
@@ -742,8 +807,8 @@ class Maps:
             raise ValueError('Mask must be an instance of nibabel.Nifti1Image')
 
         if self.maps is not None:
-            mask_array = self._flatten_array(mask.get_fdata())
-            filter_matrix = scipy.sparse.diags(mask_array, format='csr')
+            mask_array = self._flatten_array(mask.get_fdata()).astype(self._dtype)
+            filter_matrix = scipy.sparse.diags(mask_array, format='csr').astype(self._dtype)
             self.maps = filter_matrix.dot(self.maps)
 
         self._mask = mask
@@ -1045,7 +1110,7 @@ class Maps:
 
         return var_map
 
-    def cov(self, atlas=True, bias=False, shrink=None, sparse=False, ignore_bg=True):
+    def cov(self, atlas=True, bias=False, shrink=None, sparse=False, ignore_bg=True, verbose=False):
         '''
             Computes the empirical covariance matrix of the voxels, the observations being the different maps.
             Important : Considering covariance between atlas' labels (atlas=True) instead of voxels is highly recommended
@@ -1071,14 +1136,14 @@ class Maps:
         ddof = 0 if bias else 1
 
         if atlas:
-            labels = self._atlas.labels
-            if ignore_bg:
-                maps[0, :] = 0
-                labels = labels[1:]
+            labels = self._atlas.get_labels(ignore_bg=ignore_bg)
+            if ignore_bg and self._atlas.has_background():
+                maps[self._atlas.bg_index, :] = 0
 
 
-        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose()
-        e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose()
+        if verbose: print('Computing cov matrix')
+        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose().astype(self._dtype)
+        e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose().astype(self._dtype)
 
         M1 = maps.dot(e1)
         M2 = maps.dot(e2)
@@ -1087,10 +1152,14 @@ class Maps:
         # Empirical covariance matrix
         S =  M3 - M1.dot(M2.transpose())
 
+        del M1, M2, M3
+
+        if verbose: print('To dense...')
         if not sparse:
             S = S.toarray()
 
         if shrink == 'LW':
+            if verbose: print('Shrink')
             S = LedoitWolf().fit(S.toarray()).covariance_
 
         return S, labels if atlas else S
