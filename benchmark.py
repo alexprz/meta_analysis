@@ -77,28 +77,37 @@ if __name__ == '__main__':
     #Build custom atlases
     n_components = 5
     tag = '{}-sigma-{}-{}-components'.format(keyword, sigma, n_components)
-    load = False
-    params = {
-        'n_components':  n_components,
-        'memory': "nilearn_cache",
-        'memory_level': 2,
-        'threshold': 3.,
-        'n_init': 1,
-        'verbose': 1,
-        'mask_strategy': 'template',
-        'n_jobs': -2
+    load = True
+
+    params_CanICA = {
+        'n_components':  n_components
+    }
+
+    params_DictLearning = {
+        'n_components': n_components
+    }
+
+    params_Wards = {
+        'n_parcels': n_components
     }
 
     imgs = maps.to_img(sequence=True, verbose=True)
     
-    CanICA_imgs = fit_Model(CanICA, imgs, params, tag=tag, load=load).components_img_
+    CanICA_imgs = fit_Model(fit_CanICA, imgs, params_CanICA, tag=tag, load=load).components_img_
+    DictLearning_imgs = fit_Model(fit_DictLearning, maps.to_img(), params_DictLearning, tag=tag, load=load).components_img_
+    Ward_imgs = fit_Model(fit_Wards, maps.to_img(), params_Wards, tag=tag, load=load).labels_img_
+
     atlas_CanICA = Maps(CanICA_imgs, template=template).to_atlas(verbose=True)
+    atlas_DictLearning = Maps(DictLearning_imgs, template=template).to_atlas(verbose=True)
+    atlas_Ward = Maps(Ward_imgs, template=template).to_atlas(verbose=True)
 
     atlas_dict = {
         'Harvard Oxford 0': atlas_HO_0,
         'Harvard Oxford 25': atlas_HO_25,
         'Harvard Oxford 50': atlas_HO_50,
         'CanICA {} components'.format(n_components): atlas_CanICA,
+        'Dict Learning {} components'.format(n_components): atlas_DictLearning,
+        'Ward {} components'.format(n_components): atlas_Ward,
     }
 
     criteria = [

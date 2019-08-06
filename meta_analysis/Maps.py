@@ -781,8 +781,9 @@ class Maps:
         # print(np.unique(array))
         # uniques = np.unique(array)
         # n_tot = len(uniques)
-        array = np.concatenate((np.zeros(array.shape[:-1]+(1,)), array), axis=3)
-        array_atlas = np.argmax(array, axis=3)
+        if len(array.shape) == 4:
+            array = np.concatenate((np.zeros(array.shape[:-1]+(1,)), array), axis=3)
+            array = np.argmax(array, axis=3)
         # array_atlas = np.zeros(array.shape[:-1])
 
         # # print(np.histogram(np.argmax(array, axis=3)))
@@ -792,7 +793,7 @@ class Maps:
         #     array_atlas[array[:, :, :, k] > 0] = k+1
 
 
-        return {'maps': nib.Nifti1Image(array_atlas, self._affine), 'labels': ['Background']+['r{}'.format(k) for k in range(self.n_maps)]}
+        return {'maps': nib.Nifti1Image(array, self._affine), 'labels': ['Background']+['r{}'.format(k) for k in range(self.n_maps)]}
 
 
     #_____________PUBLIC_TOOLS_____________#
