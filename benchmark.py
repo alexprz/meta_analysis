@@ -18,6 +18,8 @@ atlas_HO_0 = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm')
 atlas_HO_25 = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
 atlas_HO_50 = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr50-2mm')
 
+n_labels = len(atlas_HO_0['labels'])
+
 #_________CRITERIA_________#
 def pearson_distance(array_ref, array_obs, **kwargs):
     array_ref /= np.sum(array_ref)
@@ -75,7 +77,7 @@ if __name__ == '__main__':
     maps.smooth(sigma, inplace=True, verbose=True)
     
     #Build custom atlases
-    n_components = 20
+    n_components = 21
     tag = '{}-sigma-{}-{}-components'.format(keyword, sigma, n_components)
     load = True
 

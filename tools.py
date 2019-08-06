@@ -5,6 +5,7 @@ from scipy.ndimage import gaussian_filter
 import time
 import pickle
 import os
+import ntpath
 from colorama import Fore, Style
 
 from globals import mem, input_path, Ni, Nj, Nk, coordinates, affine, inv_affine, corpus_tfidf, gray_mask
@@ -69,6 +70,10 @@ def build_avg_map_corpus(sigma):
     return all_maps.avg().smooth(sigma=sigma, inplace=True)
 
 #_________SAVING_TOOLS_________#
+def filename_from_path(path):
+    head, tail = ntpath.split(path)
+    return tail or ntpath.basename(head)
+
 def get_dump_token(prefix, tag=None, ext=None):
     suffix = str(tag)
 
@@ -77,22 +82,24 @@ def get_dump_token(prefix, tag=None, ext=None):
     
     return prefix+suffix
 
-def pickle_dump(obj, filename, save=True):
+def pickle_dump(obj, file_path, save=True):
     if save:
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
-        with open(filename, 'wb') as file:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, 'wb') as file:
             pickle.dump(obj, file)
     return obj
 
-def pickle_load(filename, verbose=True, load=True):
+def pickle_load(file_path, verbose=True, load=True):
     if not load: 
-        print('[Pickle] No file loaded.')
+        print_percent(string=f'{Fore.YELLOW}No file loaded.{Style.RESET_ALL}', prefix='Pickle')
         return None
+
+    filename = filename_from_path(file_path)
     try:
-        with open(filename, 'rb') as file:
+        with open(file_path, 'rb') as file:
             obj = pickle.load(file)
         if verbose: print_percent(string=f'File {filename} {Fore.YELLOW}loaded succesfully.{Style.RESET_ALL}', prefix='Pickle')
         return obj
     except:
-        if verbose: print_percent(string=f'{Fore.YELLOW}No file loaded.{Style.RESET_ALL}', prefix='Pickle')
+        if verbose: print_percent(string=f'File {filename} does not exist. {Fore.YELLOW}No file loaded.{Style.RESET_ALL}', prefix='Pickle')
         return None
