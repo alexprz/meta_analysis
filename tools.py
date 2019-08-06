@@ -76,14 +76,17 @@ def get_dump_token(prefix, tag=None, ext=None):
     
     return prefix+suffix
 
-def dump(obj, filename, save=True):
+def pickle_dump(obj, filename, save=True):
     if save:
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         with open(filename, 'wb') as file:
             pickle.dump(obj, file)
     return obj
 
-def load(filename, verbose=True):
+def pickle_load(filename, verbose=True, load=True):
+    if not load: 
+        print('[Pickle] No file loaded.')
+        return None
     try:
         with open(filename, 'rb') as file:
             obj = pickle.load(file)

@@ -4,12 +4,14 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from nilearn.decomposition import DictLearning, CanICA
+
 
 from meta_analysis import Maps, plotting, print_percent
 
 from tools import build_df_from_keyword
 from globals import template, gray_mask
-from clustering import fit_CanICA, fit_DictLearning, fit_Kmeans, fit_Wards, fit_GroupICA
+from clustering import fit_CanICA, fit_DictLearning, fit_Kmeans, fit_Wards, fit_GroupICA, fit_Model
 
 #_________ATLASES_________#
 atlas_HO_0 = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm')
@@ -70,10 +72,12 @@ if __name__ == '__main__':
 
     df = build_df_from_keyword(keyword)
     maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask, verbose=True)
-
+    maps.smooth(sigma, inplace=True, verbose=True)
+    
     #Build custom atlases
-    n_components = 50
-    tag = 1
+    n_components = 5
+    tag = '{}-sigma-{}-{}-components'.format(keyword, sigma, n_components)
+    load = False
     params = {
         'n_components':  n_components,
         'memory': "nilearn_cache",
@@ -87,19 +91,22 @@ if __name__ == '__main__':
 
     imgs = maps.to_img(sequence=True, verbose=True)
     
-    CanICA_imgs = fit_CanICA(imgs, params, tag=tag).components_img_
+    CanICA_imgs = fit_Model(CanICA, imgs, params, tag=tag, load=load).components_img_
     atlas_CanICA = Maps(CanICA_imgs, template=template).to_atlas(verbose=True)
 
     atlas_dict = {
         'Harvard Oxford 0': atlas_HO_0,
         'Harvard Oxford 25': atlas_HO_25,
         'Harvard Oxford 50': atlas_HO_50,
-        'CanICA {components}': atlas_CanICA,
+        'CanICA {} components'.format(n_components): atlas_CanICA,
     }
 
     criteria = [
         pearson_distance
     ]
+
+    for name, atlas in atlas_dict.items():
+        plotting.plot_activity_map(atlas['maps'], title=name)
 
     benchmarks = benchmark(maps.avg(), atlas_dict, criteria, verbose=True)
     
