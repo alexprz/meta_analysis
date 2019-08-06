@@ -77,7 +77,7 @@ if __name__ == '__main__':
     maps.smooth(sigma, inplace=True, verbose=True)
     
     #Build custom atlases
-    n_components = 21
+    n_components = n_labels-1
     tag = '{}-sigma-{}-{}-components'.format(keyword, sigma, n_components)
     load = True
 

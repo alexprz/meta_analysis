@@ -343,7 +343,6 @@ class Maps:
         if self._has_mask():
             self.apply_mask(mask)
 
-        self._build_atlas_filter_matrix()
         self._refresh_atlas_maps()
 
         if not save_memory:
@@ -817,7 +816,7 @@ class Maps:
     def apply_atlas(self, atlas, inplace=False):
         new_maps = self if inplace else copy.copy(self)
         new_maps._atlas = Atlas(atlas)
-        new_maps._build_atlas_filter_matrix()
+        new_maps._atlas_filter_matrix = new_maps._build_atlas_filter_matrix()
         new_maps._refresh_atlas_maps()
 
         return new_maps
