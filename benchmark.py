@@ -93,15 +93,21 @@ if __name__ == '__main__':
         'n_parcels': n_components
     }
 
+    params_Kmeans = {
+        'n_parcels': n_components
+    }
+
     imgs = maps.to_img(sequence=True, verbose=True)
     
     CanICA_imgs = fit_Model(fit_CanICA, imgs, params_CanICA, tag=tag, load=load).components_img_
     # DictLearning_imgs = fit_Model(fit_DictLearning, maps.to_img(), params_DictLearning, tag=tag, load=load).components_img_
     Ward_imgs = fit_Model(fit_Wards, maps.to_img(), params_Wards, tag=tag, load=load).labels_img_
+    Kmeans_imgs = fit_Model(fit_Kmeans, maps.to_img(), params_Kmeans, tag=tag, load=load).labels_img_
 
     atlas_CanICA = Maps(CanICA_imgs, template=template).to_atlas(verbose=True)
     # atlas_DictLearning = Maps(DictLearning_imgs, template=template).to_atlas(verbose=True)
     atlas_Ward = Maps(Ward_imgs, template=template).to_atlas(verbose=True)
+    atlas_Kmeans = Maps(Kmeans_imgs, template=template).to_atlas(verbose=True)
 
     atlas_dict = {
         'Harvard Oxford 0': atlas_HO_0,
@@ -110,6 +116,7 @@ if __name__ == '__main__':
         'CanICA {} components'.format(n_components): atlas_CanICA,
         # 'Dict Learning {} components'.format(n_components): atlas_DictLearning,
         'Ward {} components'.format(n_components): atlas_Ward,
+        'Kmeans {} components'.format(n_components): atlas_Kmeans,
     }
 
     criteria = [

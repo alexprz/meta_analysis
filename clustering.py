@@ -39,8 +39,19 @@ def fit_DictLearning(imgs, params):
     return DictLearning(**context).fit(imgs)
 
 def fit_Kmeans(imgs, params):
-    raise NotImplementedError('')
+    defaults = {
+        'method': 'kmeans',
+        'n_parcels': 10,
+        'standardize': True,
+        'smoothing_fwhm': 10.,
+        'memory': 'nilearn_cache',
+        'memory_level': 1,
+        'verbose': 1
+    }
+    context = dict(defaults, **params)
 
+    return Parcellations(**context).fit(imgs)
+    
 def fit_Wards(imgs, params):
     defaults = {
         'method': 'ward', 
