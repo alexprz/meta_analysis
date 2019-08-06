@@ -5,9 +5,10 @@ from scipy.ndimage import gaussian_filter
 import time
 import pickle
 import os
+from colorama import Fore, Style
 
 from globals import mem, input_path, Ni, Nj, Nk, coordinates, affine, inv_affine, corpus_tfidf, gray_mask
-from meta_analysis import Maps
+from meta_analysis import Maps, print_percent
 
 @mem.cache
 def build_index(file_path):
@@ -90,8 +91,8 @@ def pickle_load(filename, verbose=True, load=True):
     try:
         with open(filename, 'rb') as file:
             obj = pickle.load(file)
-        if verbose: print('[Pickle] {} loaded succesfully.'.format(filename))
+        if verbose: print_percent(string=f'File {filename} {Fore.YELLOW}loaded succesfully.{Style.RESET_ALL}', prefix='Pickle')
         return obj
     except:
-        if verbose: print('[Pickle] No file loaded.')
+        if verbose: print_percent(string=f'{Fore.YELLOW}No file loaded.{Style.RESET_ALL}', prefix='Pickle')
         return None

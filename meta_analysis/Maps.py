@@ -49,7 +49,7 @@ def compute_maps(df, **kwargs):
 
     n_tot = df.shape[0]
     for i_row, row in enumerate(zip(df[groupby_col], df[x_col], df[y_col], df[z_col], df[weight_col])):
-        print_percent(i_row, n_tot, string='Loading dataframe {0:.1f}%...', verbose=verbose)
+        print_percent(i_row, n_tot, string='Loading dataframe {0:.1f}%...', verbose=verbose, prefix='Maps')
 
         groupby_id, x, y, z, weight = row
         map_id = index_dict[groupby_id]
@@ -111,8 +111,8 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
     
     results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
     
-    if verbose: print('Merging...')
-    for m in results:
+    for k, m in enumerate(results):
+        if verbose: print_percent(k, n_jobs, string='Merging... {0:.2f}%', prefix='Maps')
         maps += m
 
     maps = maps.transpose()
@@ -679,7 +679,7 @@ class Maps:
                 res = []
                 n_tot = len(maps_range)
                 for i, k in enumerate(maps_range):
-                    print_percent(i, n_tot, string='Converting {1} out of {2}... {0:.2f}%', verbose=verbose, rate=0)
+                    print_percent(i, n_tot, string='Converting {1} out of {2}... {0:.2f}%', verbose=verbose, rate=0, prefix='Maps')
                     res.append(self.map_to_img(maps[:, k], self._Ni, self._Nj, self._Nk, self._affine))
                 return res
 
@@ -948,7 +948,7 @@ class Maps:
             n_tot = len(map_ids)
             count = 0
             for k in map_ids:
-                print_percent(count, n_tot, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
+                print_percent(count, n_tot, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose, prefix='Maps')
                 count += 1
                 
                 if not self.save_memory:
@@ -1207,7 +1207,7 @@ class Maps:
         var_map_atlas = None
 
         for k in range(self.n_maps):
-            print_percent(k, self.n_maps, 'Iterative smooth avg var {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
+            print_percent(k, self.n_maps, 'Iterative smooth avg var {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose, prefix='Maps')
 
             current_map = self._get_maps(map_id=k, atlas=False, dense=not self.save_memory)
             current_map = self._smooth(current_map, sigma, self._Ni, self._Nj, self._Nk)

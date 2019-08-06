@@ -57,7 +57,7 @@ def benchmark(maps, atlas_dict, criteria, verbose=False, **kwargs):
 
     for criterion in criteria:
         for name, atlas in atlas_dict.items():
-            print_percent(k, n_tot, string='Benchmarking atlas {1} out of {2} : {0:.2f}%...', rate=0, verbose=verbose)
+            print_percent(k, n_tot, string='Benchmarking atlas {1} out of {2} : {0:.2f}%...', rate=0, verbose=verbose, prefix='Benchmark')
             score = benchmark_atlas(maps, atlas, criterion, verbose=verbose, **kwargs)
             df_list.append([criterion.__name__, name, score])
             k += 1
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     maps.smooth(sigma, inplace=True, verbose=True)
     
     #Build custom atlases
-    n_components = 5
+    n_components = 20
     tag = '{}-sigma-{}-{}-components'.format(keyword, sigma, n_components)
     load = True
 
@@ -94,11 +94,11 @@ if __name__ == '__main__':
     imgs = maps.to_img(sequence=True, verbose=True)
     
     CanICA_imgs = fit_Model(fit_CanICA, imgs, params_CanICA, tag=tag, load=load).components_img_
-    DictLearning_imgs = fit_Model(fit_DictLearning, maps.to_img(), params_DictLearning, tag=tag, load=load).components_img_
+    # DictLearning_imgs = fit_Model(fit_DictLearning, maps.to_img(), params_DictLearning, tag=tag, load=load).components_img_
     Ward_imgs = fit_Model(fit_Wards, maps.to_img(), params_Wards, tag=tag, load=load).labels_img_
 
     atlas_CanICA = Maps(CanICA_imgs, template=template).to_atlas(verbose=True)
-    atlas_DictLearning = Maps(DictLearning_imgs, template=template).to_atlas(verbose=True)
+    # atlas_DictLearning = Maps(DictLearning_imgs, template=template).to_atlas(verbose=True)
     atlas_Ward = Maps(Ward_imgs, template=template).to_atlas(verbose=True)
 
     atlas_dict = {
@@ -106,7 +106,7 @@ if __name__ == '__main__':
         'Harvard Oxford 25': atlas_HO_25,
         'Harvard Oxford 50': atlas_HO_50,
         'CanICA {} components'.format(n_components): atlas_CanICA,
-        'Dict Learning {} components'.format(n_components): atlas_DictLearning,
+        # 'Dict Learning {} components'.format(n_components): atlas_DictLearning,
         'Ward {} components'.format(n_components): atlas_Ward,
     }
 
