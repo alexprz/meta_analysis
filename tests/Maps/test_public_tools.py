@@ -134,4 +134,49 @@ class RandomizeTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             maps = Maps(Ni=1, Nj=3, Nk=3).randomize(n_peaks=10, n_maps=2, p=p)
 
+class SplitTestCase(unittest.TestCase):
+    def setUp(self):
+        self.array = np.array([[[1, 0, 0],
+                                [0, 1, 0],
+                                [0, 0, 2]]])
 
+        self.array2 = np.array([[[[1, 0], [0, 0], [0, 0]],
+                                 [[0, 0], [1, 1], [0, 0]],
+                                 [[0, 0], [0, 0], [2, 0]]]])
+
+        self.Ni, self.Nj, self.Nk = self.array.shape
+
+    def test_max_prop_one_maps(self):
+        maps = Maps(self.array)
+        maps_A, maps_B = maps.split(prop=1.)
+        
+        self.assertTrue(np.array_equal(maps_A.to_array(), self.array))
+        self.assertEqual(maps_B.n_maps, 0)
+
+    def test_max_prop_two_maps(self):
+        maps = Maps(self.array2)
+        maps_A, maps_B = maps.split(prop=1.)
+        
+        self.assertTrue(np.array_equal(maps_A.to_array(), self.array2))
+        self.assertEqual(maps_B.n_maps, 0)
+
+    def test_min_prop_one_maps(self):
+        maps = Maps(self.array)
+        maps_A, maps_B = maps.split(prop=0.)
+        
+        self.assertTrue(np.array_equal(maps_B.to_array(), self.array))
+        self.assertEqual(maps_A.n_maps, 0)
+
+    def test_min_prop_two_maps(self):
+        maps = Maps(self.array2)
+        maps_A, maps_B = maps.split(prop=0.)
+        
+        self.assertTrue(np.array_equal(maps_B.to_array(), self.array2))
+        self.assertEqual(maps_A.n_maps, 0)
+    
+    def test_half_prop_two_maps(self):
+        maps = Maps(self.array2)
+        maps_A, maps_B = maps.split(prop=0.5)
+        
+        self.assertTrue(np.array_equal(maps_A.to_array(), self.array2[:, :, :, 0]) or np.array_equal(maps_A.to_array(), self.array2[:, :, :, 1]))
+        self.assertTrue(np.array_equal(maps_B.to_array(), self.array2[:, :, :, 0]) or np.array_equal(maps_B.to_array(), self.array2[:, :, :, 1]))

@@ -975,6 +975,29 @@ class Maps:
 
         return new_maps
 
+    def split(self, prop=0.5, random_state=None):
+        np.random.seed(random_state)
+
+        maps_A = Maps.copy_header(self)
+        maps_B = Maps.copy_header(self)
+
+        id_sub_maps_A = np.sort(np.random.choice(np.arange(self.n_maps), np.ceil(prop*self.n_maps).astype(int), replace=False))
+        id_sub_maps_B = np.sort(np.delete(np.arange(self.n_maps), id_sub_maps_A))
+
+        def filter_matrix(array):
+            M = scipy.sparse.lil_matrix((self.n_maps, array.shape[0]))
+            for k in range(array.shape[0]):
+                M[array[k], k] = 1
+            return scipy.sparse.csr_matrix(M)
+
+        filter_matrix_A = filter_matrix(id_sub_maps_A)
+        filter_matrix_B = filter_matrix(id_sub_maps_B)
+
+        maps_A.maps = self.maps.dot(filter_matrix_A)
+        maps_B.maps = self.maps.dot(filter_matrix_B)
+
+        return maps_A, maps_B
+
     #_____________STATISTICS_____________#
     def n_peaks(self, atlas=False):
         '''
