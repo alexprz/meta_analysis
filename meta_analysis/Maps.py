@@ -1,21 +1,21 @@
 '''
     TEST
 '''
-import scipy, copy, nilearn
+import scipy
+import copy
+import nilearn
 import numpy as np
 import nibabel as nib
 import pandas as pd
-import nilearn
 from scipy.ndimage import gaussian_filter
 from sklearn.covariance import LedoitWolf
-from nilearn import datasets
 
 from .globals import mem
-
-from .tools import print_percent, index_3D_to_1D
+from .tools import print_percent
 
 import multiprocessing
 from joblib import Parallel, delayed
+
 
 def compute_maps(df, **kwargs):
     '''
@@ -55,14 +55,15 @@ def compute_maps(df, **kwargs):
         map_id = index_dict[groupby_id]
 
         i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
-        
+
         if mask is None or mask[i, j, k] == 1:
             p = Maps.coord_to_id(i, j, k, Ni, Nj, Nk)
             maps[map_id, p] += weight
 
     return scipy.sparse.csr_matrix(maps)
 
-# @mem.cache
+
+@mem.cache
 def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=False, dtype=np.float32):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
@@ -70,7 +71,7 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
         reduce : integer, reducing scale factor. Ex : if reduce=2, aggregates voxels every 2 voxels in each direction.
                 Notice that this affects the affine and box size.
 
-        Returns 
+        Returns:
             maps: sparse CSR matrix of shape (n_voxels, n_maps) containing all the related flattenned maps where
                     n_maps is the number of pmids related to the keyword
                     n_voxels is the number of voxels in the box (may have changed if reduce != 1)
@@ -79,22 +80,22 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
     '''
 
     df = df.astype({col_names['x']: 'float64',
-               col_names['y']: 'float64',
-               col_names['z']: 'float64',
-               col_names['weight']: 'float64',
-               })
+                    col_names['y']: 'float64',
+                    col_names['z']: 'float64',
+                    col_names['weight']: 'float64',
+                    })
 
     # Creating map index
     unique_pmid = df[col_names['groupby']].unique()
     n_maps = len(unique_pmid)
-    index_dict = {k:v for v, k in enumerate(unique_pmid)}
+    index_dict = {k: v for v, k in enumerate(unique_pmid)}
 
     # LIL format allows faster incremental construction of sparse matrix
     maps = scipy.sparse.csr_matrix((n_maps, Ni*Nj*Nk), dtype=dtype)
 
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()//2
-    splitted_df= np.array_split(df, n_jobs, axis=0)
+    splitted_df = np.array_split(df, n_jobs, axis=0)
 
     kwargs = {
         'Ni': Ni,
@@ -108,16 +109,18 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
         'verbose': verbose,
         'dtype': dtype
     }
-    
+
     results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
-    
+
     for k, m in enumerate(results):
-        if verbose: print_percent(k, n_jobs, string='Merging... {0:.2f}%', prefix='Maps')
+        if verbose:
+            print_percent(k, n_jobs, string='Merging... {0:.2f}%', prefix='Maps')
         maps += m
 
     maps = maps.transpose()
-    
+
     return maps
+
 
 def build_maps_from_img(img, dtype=np.float32):
     img = nilearn.image.load_img(img)
@@ -137,6 +140,7 @@ def build_maps_from_img(img, dtype=np.float32):
     maps = scipy.sparse.csr_matrix(data)
 
     return maps, Ni, Nj, Nk, img.affine
+
 
 class Atlas:
     def __init__(self, atlas=None, bg_label='Background'):
@@ -167,7 +171,7 @@ class Atlas:
 
     def get_labels(self, ignore_bg=False, bg_label=None):
         labels, labels_without_bg = self.labels, self.labels_without_bg
-        
+
         if bg_label is not None:
             _, labels_without_bg, _ = self.get_bg_labels(bg_label)
 
@@ -182,7 +186,7 @@ class Atlas:
 
     def get_labels_range(self, ignore_bg=False, bg_label=None):
         labels_range, labels_range_without_bg = self.labels_range, self.labels_range_without_bg
-        
+
         if bg_label is not None:
             _, _, labels_range_without_bg = self.get_bg_labels(bg_label)
 
@@ -214,22 +218,23 @@ class Atlas:
 
         return bg_index, labels_without_bg, labels_range_without_bg
 
+
 class Maps:
     def __init__(self, df=None,
-                       template=None,
-                       Ni=None, Nj=None, Nk=None,
-                       affine=None,
-                       mask=None,
-                       atlas=None,
-                       groupby_col=None,
-                       x_col='x',
-                       y_col='y',
-                       z_col='z',
-                       weight_col='weight',
-                       save_memory=True,
-                       verbose=False,
-                       dtype=np.float64
-                       ):
+                 template=None,
+                 Ni=None, Nj=None, Nk=None,
+                 affine=None,
+                 mask=None,
+                 atlas=None,
+                 groupby_col=None,
+                 x_col='x',
+                 y_col='y',
+                 z_col='z',
+                 weight_col='weight',
+                 save_memory=True,
+                 verbose=False,
+                 dtype=np.float64
+                 ):
         '''
 
 
@@ -246,7 +251,7 @@ class Maps:
             x_col (str): Name of the column storing the x coordinates.
             y_col (str): Name of the column storing the y coordinates.
             z_col (str): Name of the column storing the z coordinates.
-            weight_col (str): Name of the column storing the weights. 
+            weight_col (str): Name of the column storing the weights.
         '''
 
         if template is not None and (isinstance(template, nib.Nifti1Image) or isinstance(template, str)):
@@ -273,11 +278,10 @@ class Maps:
         self._mask = mask
         self._maps = None
         self._atlas = Atlas(atlas)
-        self._maps_dense =  None
+        self._maps_dense = None
         self._maps_atlas = None
         self._atlas_filter_matrix = None
         self._dtype = dtype
-
 
         if isinstance(df, pd.DataFrame):
             if groupby_col is None:
@@ -320,7 +324,6 @@ class Maps:
         elif not isinstance(df, Maps):
             raise ValueError('First argument not understood : {}'.format(type(df)))
 
-
         if Ni is None or Nj is None or Nk is None:
             raise ValueError('Must either specify Ni, Nj, Nk or template.')
 
@@ -328,7 +331,6 @@ class Maps:
         self._Nj = Nj
         self._Nk = Nk
         self._affine = affine
-
 
         if self._mask_dimensions_missmatch():
             raise ValueError('Mask dimensions missmatch. Given box size ({}, {}, {}) whereas mask size is {}. Consider resampling either input data or mask.'.format(self._Ni, self._Nj, self._Nk, self._mask.get_fdata().shape))
@@ -339,7 +341,6 @@ class Maps:
         if self._box_dimensions_missmatch():
             raise ValueError('Box dimension missmatch. Given box size is ({}, {}, {}) for {} voxels whereas maps contains {} voxels.'.format(self._Ni, self._Nj, self._Nk, self._Ni*self._Nj*self._Nk, self._maps.shape))
 
-
         if self._has_mask():
             self.apply_mask(mask)
 
@@ -348,8 +349,7 @@ class Maps:
         if not save_memory:
             self._set_dense_maps()
 
-
-    #_____________PROPERTIES_____________#
+    # _____________PROPERTIES_____________ #
     @property
     def save_memory(self):
         return self._save_memory
@@ -359,7 +359,8 @@ class Maps:
         self._save_memory = save_memory
 
         if save_memory:
-            if hasattr(self, '_maps_dense'): del self._maps_dense
+            if hasattr(self, '_maps_dense'):
+                del self._maps_dense
         else:
             self._set_dense_maps()
 
@@ -395,7 +396,7 @@ class Maps:
     def n_maps(self):
         return 0 if self._maps is None else self._maps.shape[1]
 
-    #_____________CLASS_METHODS_____________#
+    # _____________CLASS_METHODS_____________ #
     @classmethod
     def zeros(cls, n_voxels, n_maps=1, **kwargs):
         '''
@@ -407,7 +408,7 @@ class Maps:
     @classmethod
     def random(cls, n_peaks, n_maps, Ni=None, Nj=None, Nk=None, affine=None, template=None, mask=None, atlas=None, p=None):
         '''
-            Create the given number of maps and sample peaks on them. 
+            Create the given number of maps and sample peaks on them.
 
             See the Maps.__init__ doc for Ni, Nj, Nk, mask, atlas parameters.
             See the Maps.randomize doc for n_peaks, n_maps, p parameters.
@@ -431,7 +432,7 @@ class Maps:
         maps._copy_header(other)
         return maps
 
-    #_____________PRIVATE_TOOLS_____________#
+    # _____________PRIVATE_TOOLS_____________ #
     def _copy_header(self, other):
         self._Ni = other._Ni
         self._Nj = other._Nj
@@ -463,7 +464,7 @@ class Maps:
     @staticmethod
     def id_to_coord(id, Ni, Nj, Nk):
         return np.unravel_index(id, (Ni, Nj, Nk), order='F')
-   
+
     @staticmethod
     def flatten_array(array, _2D=None):
         shape = -1 if _2D is None else (-1, _2D)
@@ -522,7 +523,7 @@ class Maps:
         if map_id is None:
             if atlas:
                 return self._maps_atlas
-            
+
             elif dense:
                 return self._maps_dense
 
@@ -532,13 +533,12 @@ class Maps:
         else:
             if atlas:
                 return self._maps_atlas[:, map_id]
-            
+
             elif dense:
                 return self._maps_dense[:, :, :, map_id]
 
             else:
                 return self._maps[:, map_id]
-
 
     def _set_dense_maps(self):
         if self._maps is None:
@@ -575,7 +575,7 @@ class Maps:
 
         return True
 
-    #_____________OPERATORS_____________#
+    # _____________OPERATORS_____________ #
 
     def __iadd__(self, val):
         self.maps += val.maps
@@ -598,7 +598,7 @@ class Maps:
     def __getitem__(self, key):
         return self.maps[:, key]
 
-    #_____________DATA_TRANSFORMERS_____________#
+    # _____________DATA_TRANSFORMERS_____________ #
     @staticmethod
     def map_to_array(map, Ni, Nj, Nk):
         '''
@@ -640,7 +640,7 @@ class Maps:
             Args:
                 map_id (int, optional): If int : id of the map to convert (3D output). 
                     If None, converts all the maps (4D output). Defaults to None. 
-        
+
             Returns:
                 (numpy.ndarray) 3D array containing the chosen map information.
         '''
@@ -658,7 +658,7 @@ class Maps:
             Args:
                 map_id (int, optional): If int : id of the map to convert (3D output). 
                     If None, converts all the maps (4D output). Defaults to None. 
-        
+
             Returns:
                 (nibabel.Nifti1Image) Nifti1Image containing the chosen map information.
         '''
@@ -672,7 +672,7 @@ class Maps:
         if sequence:
 
             n_jobs = multiprocessing.cpu_count()//2
-            splitted_range = np.array_split(range(maps.shape[1]), n_jobs)            
+            splitted_range = np.array_split(range(maps.shape[1]), n_jobs)
 
             def to_img_pool(maps_range):
                 res = []
@@ -700,7 +700,7 @@ class Maps:
             Convert one atlas map into a 3D numpy.array.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert (3D output). 
+                map_id (int, optional): If int : id of the map to convert (3D output).
                     If None, converts all the maps (4D output). Defaults to None.
                 ignore_bg (bool, optional): If True: ignore the first label of the atlas (background) which is set to 0 in the returned array.
 
@@ -717,7 +717,7 @@ class Maps:
         # label_range = range(start, self._atlas.n_labels)
 
         # label_range = self._atlas.labels_range_without_bg if ignore_bg and self._atlas.has_background() else self._atlas.label_range
-        
+
         label_range = self._atlas.get_labels_range(ignore_bg=ignore_bg, bg_label=bg_label)
         # label_range = list(range(self._atlas.n_labels))
 
@@ -733,7 +733,7 @@ class Maps:
 
         if map_id is None:
             array = np.zeros((self._Ni, self._Nj, self._Nk, self.n_maps))
-            
+
             for k in range(self.n_maps):
                 array[:, :, :, k] = self._one_map_to_array_atlas(self._maps_atlas[:, k], self._Ni, self._Nj, self._Nk, self._atlas.data, label_range)
         else:
@@ -747,7 +747,7 @@ class Maps:
             Convert one atlas map into a nibabel.Nifti1Image.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert (3D output). 
+                map_id (int, optional): If int : id of the map to convert (3D output).
                     If None, converts all the maps (4D output). Defaults to None.
                 ignore_bg (bool, optional): If True: ignore the first label of the atlas (background) which is set to 0 in the returned array.
 
@@ -765,10 +765,10 @@ class Maps:
 
         return self._atlas_filter_matrix.dot(data)
 
-    def to_atlas(self, verbose=False):
+    def to_atlas(self):
         '''
             Converts the maps into an atlas by creating a label for each different values.
-        
+
             Returns:
                 (nibabel.Nifti1Image) Nifti1Image containing the atlas
                 () Labels of the regions
@@ -786,16 +786,14 @@ class Maps:
         # array_atlas = np.zeros(array.shape[:-1])
 
         # # print(np.histogram(np.argmax(array, axis=3)))
-        
+
         # for k in range(self.n_maps):
         #     print_percent(k, self.n_maps, string='Converting to atlas label {1} out of {2} : {0:.2f}%...', rate=0, verbose=verbose)
         #     array_atlas[array[:, :, :, k] > 0] = k+1
 
-
         return {'maps': nib.Nifti1Image(array, self._affine), 'labels': ['Background']+['r{}'.format(k) for k in range(self.n_maps)]}
 
-
-    #_____________PUBLIC_TOOLS_____________#
+    # _____________PUBLIC_TOOLS_____________ #
     def apply_mask(self, mask):
         '''
             Set the contribution of every voxels outside the mask to zero.
@@ -840,13 +838,13 @@ class Maps:
                 (Maps instance) Self or a copy depending on inplace.
         '''
         if self._Ni is None or self._Nj is None or self._Nk is None:
-            raise ValueError('Invalid box size ({}, {}, {}).'.format(Ni, Nj, Nk))
+            raise ValueError('Invalid box size ({}, {}, {}).'.format(self._Ni, self._Nj, self._Nk))
 
         n_voxels = self._Ni*self._Nj*self._Nk
 
         if p is None:
             p = np.ones(n_voxels)/n_voxels
-        
+
         elif isinstance(p, Maps):
             if p.n_maps != 1:
                 raise ValueError('Maps object should contain exactly one map to serve as distribution. Given has {} maps.'.format(p.n_maps))
@@ -874,7 +872,6 @@ class Maps:
             maps[voxels_samples_unique[i], map_id] = counts[i]
 
         maps = scipy.sparse.csr_matrix(maps)
-
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = maps
@@ -940,7 +937,6 @@ class Maps:
         else:
             map_ids = [map_id]
 
-
         def smooth_pool(map_ids, self, sigma):
 
             csc_matrices = []
@@ -949,7 +945,7 @@ class Maps:
             for k in map_ids:
                 print_percent(count, n_tot, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose, prefix='Maps')
                 count += 1
-                
+
                 if not self.save_memory:
                     array = self._get_maps(map_id=k, dense=True)
                 else:
@@ -962,9 +958,8 @@ class Maps:
 
             return csc_matrices
 
-
-        nb_jobs=multiprocessing.cpu_count()//2
-        splitted_range= np.array_split(map_ids, nb_jobs)
+        nb_jobs = multiprocessing.cpu_count()//2
+        splitted_range = np.array_split(map_ids, nb_jobs)
         csc_matrices = np.concatenate(Parallel(n_jobs=nb_jobs, backend='threading')(delayed(smooth_pool)(sub_array, self, sigma) for sub_array in splitted_range))
 
         csr_maps = scipy.sparse.hstack(csc_matrices)
@@ -998,7 +993,7 @@ class Maps:
 
         return maps_A, maps_B
 
-    #_____________STATISTICS_____________#
+    # _____________STATISTICS_____________ #
     def n_peaks(self, atlas=False):
         '''
             Compute the sum of weights in each maps (equivalent to number of peaks if unit weights are 1).
@@ -1079,7 +1074,6 @@ class Maps:
 
         return maps.dot(e)
 
-
     @staticmethod
     def _variance(maps, bias=False):
         '''
@@ -1090,7 +1084,7 @@ class Maps:
         _, n_maps = maps.shape
 
         avg_map = Maps._average(maps)
-        maps_squared = maps.multiply(maps) # Squared element wise
+        maps_squared = maps.multiply(maps)  # Squared element wise
 
         avg_squared_map = Maps._average(maps_squared)
         squared_avg_map = avg_map.multiply(avg_map)
@@ -1163,8 +1157,8 @@ class Maps:
             if ignore_bg and self._atlas.has_background():
                 maps[self._atlas.bg_index, :] = 0
 
-
-        if verbose: print('Computing cov matrix')
+        if verbose:
+            print('Computing cov matrix')
         e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose().astype(self._dtype)
         e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose().astype(self._dtype)
 
@@ -1173,16 +1167,16 @@ class Maps:
         M3 = maps.dot(maps.transpose())/((self.n_maps-ddof))
 
         # Empirical covariance matrix
-        S =  M3 - M1.dot(M2.transpose())
+        S = M3 - M1.dot(M2.transpose())
 
         del M1, M2, M3
 
-        if verbose: print('To dense...')
+        print('To dense...') if verbose else None
         if not sparse:
             S = S.toarray()
 
         if shrink == 'LW':
-            if verbose: print('Shrink')
+            print('Shrink') if verbose else None
             S = LedoitWolf().fit(S.toarray()).covariance_
 
         return S, labels if atlas else S
@@ -1245,9 +1239,10 @@ class Maps:
         avg = Maps.copy_header(self)
         var = Maps.copy_header(self)
 
-        if not self.save_memory: avg_map = self.array_to_map(avg_map)
-        if not self.save_memory: var_map = self.array_to_map(var_map)
-        
+        if not self.save_memory:
+            avg_map = self.array_to_map(avg_map)
+            var_map = self.array_to_map(var_map)
+
         avg._set_maps(avg_map, refresh_atlas_maps=False)
         var._set_maps(var_map, refresh_atlas_maps=False)
 
@@ -1256,4 +1251,3 @@ class Maps:
             var._maps_atlas = var_map_atlas
 
         return avg, var
-
