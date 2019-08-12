@@ -10,3 +10,4 @@ baseline
 .coverage*
 *_cache*
 *cache_*
+.env
