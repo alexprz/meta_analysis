@@ -638,8 +638,8 @@ class Maps:
             Convert one map into a 3D numpy.ndarray.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert (3D output). 
-                    If None, converts all the maps (4D output). Defaults to None. 
+                map_id (int, optional): If int : id of the map to convert (3D output).
+                    If None, converts all the maps (4D output). Defaults to None.
 
             Returns:
                 (numpy.ndarray) 3D array containing the chosen map information.
@@ -656,8 +656,8 @@ class Maps:
             Convert one map into a nibabel.Nifti1Image.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert (3D output). 
-                    If None, converts all the maps (4D output). Defaults to None. 
+                map_id (int, optional): If int : id of the map to convert (3D output).
+                    If None, converts all the maps (4D output). Defaults to None.
 
             Returns:
                 (nibabel.Nifti1Image) Nifti1Image containing the chosen map information.
@@ -819,26 +819,48 @@ class Maps:
 
         return new_maps
 
-    def randomize(self, n_peaks, n_maps, p=None, override_mask=False, inplace=False):
+    def randomize(self, size, p=None, override_mask=False, inplace=False):
         '''
-            Randomize the maps by sampling n_peaks of weight 1 (may overlap) over n_maps maps.
+        Randomize the maps by sampling n_peaks of weight 1 (may overlap) over n_maps maps.
 
-            Args:
-                n_peaks (int): Number of peaks to sample maps-wise. Each peak has a weight 1 and the weights of the peaks sampled on the same voxel of the same map are added.
-                n_maps (int): Number of maps on which to perform the sample.
-                p (Maps instance or np.ndarray): (Optional) Distribution of probability of the peaks over the voxels.
-                    The distribution may be given either by a Maps instance containing 1 map or a np.ndarray of same shape as the box of the current Maps instance (Ni, Nj, Nk).
-                    If None, sample uniformly accros the box. Default: None
-                override_mask (bool): (Optional) If False, use the mask given when initializing the Maps object.
-                    Important : the given distribution p is then shrinked and re-normalized.
-                    If True p is unchanged. Default : False.
-                inplace (bool): (Optional) Performs the sampling inplace (True) or creates a new instance (False). Default False.
+        Args:
+            size: int or size 2 tuple or 1D numpy.ndarray.
+                If 1D numpy.ndarray, creates as many maps as the array length
+                and sample the given number of peaks in each maps.
+                Each peak has a weight 1 and the weights of the peaks sampled
+                on the same voxel of the same map are added.
+                If tuple (n_peaks, n_maps) given, creates n_maps, samples
+                n_peaks and assign each peak to a map uniformly.
+                If int given, equivalent as tuple with n_maps=1.
+            p (Maps instance or np.ndarray): (Optional) Distribution of probability of the peaks over the voxels.
+                The distribution may be given either by a Maps instance containing 1 map or a np.ndarray of same shape as the box of the current Maps instance (Ni, Nj, Nk).
+                If None, sample uniformly accros the box. Default: None
+            override_mask (bool): (Optional) If False, use the mask given when initializing the Maps object.
+                Important : the given distribution p is then shrinked and re-normalized.
+                If True p is unchanged. Default : False.
+            inplace (bool): (Optional) Performs the sampling inplace (True) or creates a new instance (False). Default False.
 
-            Returns:
-                (Maps instance) Self or a copy depending on inplace.
+        Returns:
+            (Maps instance) Self or a copy depending on inplace.
         '''
         if self._Ni is None or self._Nj is None or self._Nk is None:
             raise ValueError('Invalid box size ({}, {}, {}).'.format(self._Ni, self._Nj, self._Nk))
+
+        if isinstance(size, int):
+            n_peaks, n_maps = size, 1
+
+        elif isinstance(size, tuple):
+            if len(size) != 2:
+                raise ValueError('If given size is a tuple, must be of size 2 : (n_peaks, n_maps).')
+            n_peaks, n_maps = size
+
+        elif isinstance(size, np.ndarray):
+            if len(size.shape) != 1:
+                raise ValueError('Given size array not understood. Must be a 1D numpy array.')
+            n_peaks, n_maps = np.sum(size), size.shape[0]
+
+        else:
+            raise ValueError('Given size not understood.')
 
         n_voxels = self._Ni*self._Nj*self._Nk
 
@@ -865,11 +887,15 @@ class Maps:
 
         maps = scipy.sparse.dok_matrix((n_voxels, n_maps))
         voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)
-        voxels_samples_unique, counts = np.unique(voxels_samples, return_counts=True)
 
-        for i in range(len(voxels_samples_unique)):
-            map_id = np.random.randint(n_maps)
-            maps[voxels_samples_unique[i], map_id] = counts[i]
+        if isinstance(size, np.ndarray):
+            maps_samples = np.repeat(np.arange(n_maps), repeats=size)
+        else:
+            maps_samples = np.random.choice(n_maps, size=n_peaks)
+
+        for i in range(n_peaks):
+            map_id = maps_samples[i]
+            maps[voxels_samples[i], map_id] += 1
 
         maps = scipy.sparse.csr_matrix(maps)
 
