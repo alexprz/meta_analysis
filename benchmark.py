@@ -7,9 +7,11 @@ import seaborn as sns
 
 from meta_analysis import Maps, plotting, print_percent
 
-from tools import build_df_from_keyword
-from globals import template, gray_mask
+from tools import build_df_from_keyword, pickle_load, pickle_dump, get_dump_token
+from globals import template, gray_mask, pickle_path
 from clustering import fit_CanICA, fit_DictLearning, fit_Kmeans, fit_Wards, fit_GroupICA, fit_Model
+
+save_dir = pickle_path+'averaged_maps/'
 
 # _________ATLASES_________ #
 atlas_HO_0 = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr0-2mm')
@@ -119,10 +121,11 @@ if __name__ == '__main__':
     train_proportion = 0.5
     random_state = 0
     n_components = n_labels-1
-    alpha = 0.05
+    alpha = 0.1
 
-    tag = '{}-sigma-{}-{}-components-RS-{}'.format(keyword, sigma, n_components, random_state)
     load = True
+    tag = '{}-sigma-{}-{}-components-RS-{}'.format(keyword, sigma, n_components, random_state)
+    avg_maps_tag = '{}-sigma-{}-normalized'.format(keyword, sigma)
 
     params_CanICA = {
         'n_components':  n_components
@@ -140,10 +143,14 @@ if __name__ == '__main__':
         'n_parcels': n_components
     }
 
-    df = build_df_from_keyword(keyword)
-    maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask, verbose=True)
-    maps.smooth(sigma, inplace=True, verbose=True)
-    maps.normalize(inplace=True)
+    file_path = pickle_path+get_dump_token(tag=avg_maps_tag)
+    maps = pickle_load(file_path)
+    if maps is None:
+        df = build_df_from_keyword(keyword)
+        maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask, verbose=True)
+        maps.smooth(sigma, inplace=True, verbose=True)
+        maps.normalize(inplace=True)
+        pickle_dump(maps, file_path)
 
     maps_train, maps_test = maps.split(prop=train_proportion, random_state=random_state)
 
@@ -176,8 +183,13 @@ if __name__ == '__main__':
     atlas_Kmeans = Maps(Kmeans_imgs, template=template).to_atlas()
 
     array_avg = maps_avg.to_array()
-    atlas_mean = Maps(array_avg > 0.000003, template=template).to_atlas()
+    maps_thr = Maps(array_avg > (1-alpha)*1e-6, template=template)
+    atlas_mean = maps_thr.to_atlas()
     atlas_null = Maps(np.zeros(array_avg.shape), template=template).to_atlas()
+
+    atlas_CanICA_thr = Maps(CanICA_imgs, template=template, mask=maps_thr.to_img()).to_atlas()
+    atlas_Ward_thr = Maps(Ward_imgs, template=template, mask=maps_thr.to_img()).to_atlas()
+    atlas_Kmeans_thr = Maps(Kmeans_imgs, template=template, mask=maps_thr.to_img()).to_atlas()
 
     # labels, maps = atlas_mean['labels'], atlas_mean['maps']
     # print(labels)
@@ -199,11 +211,14 @@ if __name__ == '__main__':
         'Harvard Oxford 25': atlas_HO_25,
         'Harvard Oxford 50': atlas_HO_50,
         'CanICA {} components'.format(n_components): atlas_CanICA,
+        'CanICA thresholded {} components'.format(n_components): atlas_CanICA_thr,
         # 'Dict Learning {} components'.format(n_components): atlas_DictLearning,
         'Ward {} components'.format(n_components): atlas_Ward,
+        'Ward thresholded {} components'.format(n_components): atlas_Ward_thr,
         'Kmeans {} components'.format(n_components): atlas_Kmeans,
+        'Kmeans thresholded {} components'.format(n_components): atlas_Kmeans_thr,
         'Mean thresholded': atlas_mean,
-        'Null': atlas_null,
+        # 'Null': atlas_null,
     }
 
     criteria = [
