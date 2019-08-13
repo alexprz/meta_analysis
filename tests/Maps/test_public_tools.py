@@ -222,3 +222,41 @@ class SplitTestCase(unittest.TestCase):
         self.assertTrue(np.array_equal(maps_A.to_array(), self.array2[:, :, :, 0]) or np.array_equal(maps_A.to_array(), self.array2[:, :, :, 1]))
         self.assertTrue(np.array_equal(maps_B.to_array(), self.array2[:, :, :, 0]) or np.array_equal(maps_B.to_array(), self.array2[:, :, :, 1]))
         self.assertFalse(np.array_equal(maps_A.to_array(), maps_B.to_array()))
+
+class ThresholdTestCase(unittest.TestCase):
+    def setUp(self):
+        self.array = np.array([[[1, 0, 0],
+                                [0, 3, 0],
+                                [0, 0, 2]]])
+
+        self.array2 = np.array([[[[1, 0], [0, 0], [0, 0]],
+                                 [[0, 0], [3, 3], [0, 0]],
+                                 [[0, 0], [0, 0], [2, 0]]]])
+
+        self.expected = np.array([[[0, 0, 0],
+                                   [0, 3, 0],
+                                   [0, 0, 2]]])
+
+        self.expected2 = np.array([[[[0, 0], [0, 0], [0, 0]],
+                                   [[0, 0], [3, 3], [0, 0]],
+                                   [[0, 0], [0, 0], [2, 0]]]])
+
+        self.Ni, self.Nj, self.Nk = self.array.shape
+
+    def test_threshold_one_map(self):
+        maps = Maps(self.array, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        maps_ = maps.threshold(2, inplace=False)
+        maps.threshold(2, inplace=True)
+
+        self.assertTrue(np.array_equal(maps.to_array(), self.expected))
+        self.assertTrue(np.array_equal(maps_.to_array(), self.expected))
+
+    def test_threshold_two_maps(self):
+        maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        maps2_ = maps2.threshold(2, inplace=False)
+        maps2.threshold(2, inplace=True)
+
+        self.assertTrue(np.array_equal(maps2.to_array(0), self.expected2[:, :, :, 0]))
+        self.assertTrue(np.array_equal(maps2.to_array(1), self.expected2[:, :, :, 1]))
+        self.assertTrue(np.array_equal(maps2_.to_array(0), self.expected2[:, :, :, 0]))
+        self.assertTrue(np.array_equal(maps2_.to_array(1), self.expected2[:, :, :, 1]))

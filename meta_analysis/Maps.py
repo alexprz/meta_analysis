@@ -966,6 +966,23 @@ class Maps:
 
         return new_maps
 
+    def threshold(self, threshold, inplace=False):
+        '''
+            Threshold each map according to the given threshold.
+
+            Args:
+                threshold: All value greater or equal to threshold remains
+                    unchanged, all the others are set to zero.
+                inplace (bool, optional): If True performs the normalization
+                    inplace else create a new instance.
+
+            Returns:
+                (Maps) Self or a copy depending on inplace.
+        '''
+        new_maps = self if inplace else copy.copy(self)
+        new_maps.maps[new_maps.maps < threshold] = 0.
+        return new_maps
+
     @staticmethod
     def _smooth_array(array, sigma):
         return gaussian_filter(array, sigma=sigma)
