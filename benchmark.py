@@ -21,8 +21,14 @@ n_labels = len(atlas_HO_0['labels'])
 
 # _________CRITERIA_________ #
 def pearson_distance(array_ref, array_obs, **kwargs):
-    array_ref /= np.sum(array_ref)
-    array_obs /= np.sum(array_obs)
+    sum_ref = np.sum(array_ref)
+    sum_obs = np.sum(array_obs)
+
+    if sum_ref > 0:
+        array_ref /= sum_ref
+
+    if sum_obs > 0:
+        array_obs /= sum_obs
 
     with np.errstate(divide='ignore', invalid='ignore'):
         return np.sum(np.nan_to_num(np.true_divide(np.power(array_obs - array_ref, 2), array_ref), posinf=0))
@@ -54,7 +60,7 @@ def goodness_of_fit_map(img_ref, img_obs, criterion, **kwargs):
 
 def benchmark_atlas(maps, atlas, criterion, verbose=False, **kwargs):
     maps.apply_atlas(atlas, inplace=True)
-    return goodness_of_fit_map(maps.to_img(), maps.to_img_atlas(ignore_bg=True), criterion, **kwargs)
+    return goodness_of_fit_map(maps.to_img(), maps.to_img_atlas(ignore_bg=False), criterion, **kwargs)
 
 
 def benchmark(maps, atlas_dict, criteria, verbose=False, **kwargs):
@@ -72,6 +78,40 @@ def benchmark(maps, atlas_dict, criteria, verbose=False, **kwargs):
     return pd.DataFrame(df_list, columns=['Criterion', 'Atlas', 'Value'])
 
 
+def paiwise_distance(array):
+    ni, nj = array.shape
+
+    dist = np.zeros((ni, ni))
+    for k in range(ni):
+        for l in range(k+1, nj):
+            d = np.linalg.norm(array[:, k]-array[:, l])
+            dist[k, l] = d
+            dist[l, k] = d
+
+    return dist
+
+
+# def benchmark2(ref_maps, atlas_dict, N_sim, n_peaks, sigma, verbose=False):
+#     maps = Maps.copy_header(ref_maps)
+#     maps.randomize(n_peaks*np.ones(N_sim), p=ref_maps, inplace=True)
+#     maps.smooth(sigma, verbose=True)
+
+#     maps_array_2d = maps.maps.to_array()
+
+
+
+#     df_list = []
+#     k, n_tot = 0, len(atlas_dict)
+#     for name, atlas in atlas_dict.items():
+#         print_percent(k, n_tot, string='Benchmarking atlas {1} out of {2}... {0}%', rate=0, prefix='Benchmark 2', verbose=verbose)
+
+#         maps.apply_atlas(atlas, inplace=True)
+
+
+#         df_list.append(['Correlation distance', name, score])
+
+#     return pd.DataFrame(df_list, columns=['Criterion', 'Atlas', 'Value'])
+
 if __name__ == '__main__':
     keyword = 'language'
     sigma = 2.
@@ -79,6 +119,8 @@ if __name__ == '__main__':
     train_proportion = 0.5
     random_state = 0
     n_components = n_labels-1
+    alpha = 0.05
+
     tag = '{}-sigma-{}-{}-components-RS-{}'.format(keyword, sigma, n_components, random_state)
     load = True
 
@@ -101,9 +143,24 @@ if __name__ == '__main__':
     df = build_df_from_keyword(keyword)
     maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask, verbose=True)
     maps.smooth(sigma, inplace=True, verbose=True)
+    maps.normalize(inplace=True)
+
     maps_train, maps_test = maps.split(prop=train_proportion, random_state=random_state)
 
-    maps_avg = maps_test.avg()
+    maps_uniform = Maps(1./maps.n_voxels*np.ones((maps.n_voxels, 1)), Ni=maps.Ni, Nj=maps.Nj, Nk=maps.Nk, affine=maps.affine)
+    maps_avg = (1-alpha)*maps_test.avg() + alpha*maps_uniform
+
+    # plotting.plot_activity_map(maps_avg.to_img(), threshold=(1-alpha)*1e-5)
+    # plt.show()
+
+    # exit()
+
+    array = maps_avg.to_array()
+    print(len(array[array == 0.]))
+
+    # plotting.plot_activity_map(maps_avg.to_img())
+    # plt.show()
+    # exit()
 
     # imgs_3D_list = maps_train.to_img(sequence=True, verbose=True)
     imgs_4D = maps_train.to_img()
@@ -119,7 +176,23 @@ if __name__ == '__main__':
     atlas_Kmeans = Maps(Kmeans_imgs, template=template).to_atlas()
 
     array_avg = maps_avg.to_array()
-    atlas_mean = Maps(array_avg > 0.0003, template=template).to_atlas()
+    atlas_mean = Maps(array_avg > 0.000003, template=template).to_atlas()
+    atlas_null = Maps(np.zeros(array_avg.shape), template=template).to_atlas()
+
+    # labels, maps = atlas_mean['labels'], atlas_mean['maps']
+    # print(labels)
+    # print(Maps(maps))
+    # exit()
+
+    # maps_null = maps_avg.apply_atlas(atlas_null)
+    # print(maps_null._atlas.n_labels)
+    # print(maps_null._maps_atlas)
+    # print(maps_null.to_array_atlas()[0, 0, 0])
+    # print(maps_null.to_array())
+    # exit()
+    # plotting.plot_activity_map(maps_null.to_img_atlas())
+    # plt.show()
+    # exit()
 
     atlas_dict = {
         'Harvard Oxford 0': atlas_HO_0,
@@ -130,6 +203,7 @@ if __name__ == '__main__':
         'Ward {} components'.format(n_components): atlas_Ward,
         'Kmeans {} components'.format(n_components): atlas_Kmeans,
         'Mean thresholded': atlas_mean,
+        'Null': atlas_null,
     }
 
     criteria = [

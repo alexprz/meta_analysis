@@ -236,8 +236,6 @@ class Maps:
                  dtype=np.float64
                  ):
         '''
-
-
         Args:
             df (pandas.DataFrame): Pandas DataFrame containing the (x,y,z) coordinates, the weights and the map id. The names of the columns can be specified.
             template (nibabel.Nifti1Image): Template storing the box size and affine. If not None, Will overwrite parameters Ni, Nj, Nk and affine.
@@ -396,6 +394,22 @@ class Maps:
     def n_maps(self):
         return 0 if self._maps is None else self._maps.shape[1]
 
+    @property
+    def Ni(self):
+        return self._Ni
+
+    @property
+    def Nj(self):
+        return self._Nj
+
+    @property
+    def Nk(self):
+        return self._Nk
+
+    @property
+    def affine(self):
+        return self._affine
+
     # _____________CLASS_METHODS_____________ #
     @classmethod
     def zeros(cls, n_voxels, n_maps=1, **kwargs):
@@ -449,7 +463,7 @@ class Maps:
         string += '____________Header_____________\n'
         string += 'N Nonzero : {}\n'
         string += 'N voxels : {}\n'
-        string += 'N pmids : {}\n'
+        string += 'N maps : {}\n'
         string += 'Box size : ({}, {}, {})\n'
         string += 'Affine :\n{}\n'
         string += 'Has atlas : {}\n'
@@ -594,6 +608,9 @@ class Maps:
         result = copy.copy(self)
         result *= val
         return result
+
+    def __rmul__(self, val):
+        return self.__mul__(val)
 
     def __getitem__(self, key):
         return self.maps[:, key]
@@ -765,7 +782,7 @@ class Maps:
 
         return self._atlas_filter_matrix.dot(data)
 
-    def to_atlas(self):
+    def to_atlas(self, bg_label=None):
         '''
             Converts the maps into an atlas by creating a label for each different values.
 
@@ -791,7 +808,31 @@ class Maps:
         #     print_percent(k, self.n_maps, string='Converting to atlas label {1} out of {2} : {0:.2f}%...', rate=0, verbose=verbose)
         #     array_atlas[array[:, :, :, k] > 0] = k+1
 
-        return {'maps': nib.Nifti1Image(array, self._affine), 'labels': ['Background']+['r{}'.format(k) for k in range(self.n_maps)]}
+        if self.n_maps == 1:  # Atlas stored on one map
+            # n_labels = len(np.unique(self.to_array(0)))
+            n_labels = int(np.max(self.to_array(0)))+1
+
+        else:  # Atlas stored on several maps, one label on each
+            n_labels = self.n_maps
+
+        if bg_label is not None:
+            if not isinstance(bg_label, tuple) or not len(bg_label) == 2:
+                raise ValueError('Background label must be a length 2 tuple of shape (bg_label_id, bg_label_name).')
+
+            bg_label_id, bg_label_name = bg_label
+            if bg_label_id < 0 or bg_label_id >= n_labels:
+                raise ValueError('Given background index out of range. {0} labels detected.'.format(n_labels))
+
+            L1 = ['r{}'.format(k) for k in range(bg_label_id)]
+            L2 = [bg_label_name]
+            L3 = ['r{}'.format(k) for k in range(bg_label_id+1, n_labels)]
+
+            L = L1+L2+L3
+
+        else:
+            L = ['r{}'.format(k) for k in range(n_labels)]
+
+        return {'maps': nib.Nifti1Image(array, self._affine), 'labels': L}
 
     # _____________PUBLIC_TOOLS_____________ #
     def apply_mask(self, mask):
@@ -837,7 +878,7 @@ class Maps:
                 If None, sample uniformly accros the box. Default: None
             override_mask (bool): (Optional) If False, use the mask given when initializing the Maps object.
                 Important : the given distribution p is then shrinked and re-normalized.
-                If True p is unchanged. Default : False.
+                If True, no mask is used and p is unchanged. Default : False.
             inplace (bool): (Optional) Performs the sampling inplace (True) or creates a new instance (False). Default False.
 
         Returns:
