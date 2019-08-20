@@ -181,7 +181,9 @@ class Atlas:
         if self.has_background():
             return labels_without_bg
 
-        print('No background label found in given atlas (searched for \'{}\'). Consider specifying background label. ignore_bg ignored'.format(bg_label))
+        print(f'No background label matching \'{bg_label}\' in given atlas. '
+              'Consider specifying background label. ignore_bg ignored')
+
         return labels
 
     def get_labels_range(self, ignore_bg=False, bg_label=None):
@@ -196,7 +198,9 @@ class Atlas:
         if self.has_background():
             return labels_range_without_bg
 
-        print('No background label found in given atlas (searched for \'{}\'). Consider specifying background label. ignore_bg ignored'.format(bg_label))
+        print(f'No background label matching \'{bg_label}\' in given atlas. '
+              'Consider specifying background label. ignore_bg ignored')
+
         return labels_range
 
     def set_bg_labels(self, bg_label):
@@ -258,7 +262,8 @@ class Maps:
             affine = template.affine
 
         elif template is not None:
-            raise ValueError('Template not understood. Must be a nibabel.Nifti1Image or a path to it.')
+            raise ValueError('Template not understood.'
+                             'Must be a nibabel.Nifti1Image or a path to it.')
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 3:
             Ni, Nj, Nk = df.shape
@@ -305,10 +310,12 @@ class Maps:
             self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 3:
-            self._maps = scipy.sparse.csr_matrix(self._flatten_array(df, _2D=1), dtype=self._dtype)
+            df = self._flatten_array(df, _2D=1)
+            self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 4:
-            self._maps = scipy.sparse.csr_matrix(df.reshape((-1, df.shape[-1]), order='F'), dtype=self._dtype)
+            df = df.reshape((-1, df.shape[-1]), order='F')
+            self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, tuple):
             self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
@@ -320,7 +327,7 @@ class Maps:
             self._maps = None
 
         elif not isinstance(df, Maps):
-            raise ValueError('First argument not understood : {}'.format(type(df)))
+            raise ValueError(f'First argument not understood : {type(df)}')
 
         if Ni is None or Nj is None or Nk is None:
             raise ValueError('Must either specify Ni, Nj, Nk or template.')
@@ -331,13 +338,22 @@ class Maps:
         self._affine = affine
 
         if self._mask_dimensions_missmatch():
-            raise ValueError('Mask dimensions missmatch. Given box size ({}, {}, {}) whereas mask size is {}. Consider resampling either input data or mask.'.format(self._Ni, self._Nj, self._Nk, self._mask.get_fdata().shape))
+            raise ValueError(f'Mask dimensions missmatch. Given box size is '
+                             f'({self._Ni}, {self.Nj}, {self.Nk}) whereas '
+                             f'mask size is {self._mask.get_fdata().shape}. '
+                             f'Consider resampling either input data or mask.')
 
         if self._atlas_dimensions_missmatch():
-            raise ValueError('Atlas dimensions missmatch. Given box size ({}, {}, {}) whereas atlas size is {}. Consider resampling either input data or atlas.'.format(self._Ni, self._Nj, self._Nk, self._atlas.data.shape))
+            raise ValueError(f'Atlas dimensions missmatch. Given box size is '
+                             f'({self.Ni}, {self.Nj}, {self.Nk}) whereas '
+                             f'atlas size is {self._atlas.data.shape}. '
+                             f'Consider resampling input data or atlas.')
 
         if self._box_dimensions_missmatch():
-            raise ValueError('Box dimension missmatch. Given box size is ({}, {}, {}) for {} voxels whereas maps contains {} voxels.'.format(self._Ni, self._Nj, self._Nk, self._Ni*self._Nj*self._Nk, self._maps.shape))
+            raise ValueError(f'Box dimension missmatch. Given box size is '
+                             f'({self.Ni}, {self.Nj}, {self.Nk}) for '
+                             f'{self.prod_N()} voxels whereas maps '
+                             f'has shape {self._maps.shape}.')
 
         if self._has_mask():
             self.apply_mask(mask)
@@ -387,11 +403,19 @@ class Maps:
             self._set_dense_maps()
 
     @property
-    def n_voxels(self):
+    def n_voxels(self):  # Deprecated
         return 0 if self._maps is None else self._maps.shape[0]
 
     @property
-    def n_maps(self):
+    def n_v(self):
+        return 0 if self._maps is None else self._maps.shape[0]
+
+    @property
+    def n_maps(self):  # Deprecated
+        return 0 if self._maps is None else self._maps.shape[1]
+
+    @property
+    def n_m(self):
         return 0 if self._maps is None else self._maps.shape[1]
 
     @property
@@ -407,8 +431,20 @@ class Maps:
         return self._Nk
 
     @property
+    def prod_N(self):
+        return self.Ni*self.Nj*self.Nk
+
+    @property
     def affine(self):
         return self._affine
+
+    @property
+    def shape(self):
+        return (self.Ni, self.Nj, self.Nk, self.n_m)
+
+    @property
+    def shape_f(self):
+        return (self.n_v, self.n_m)
 
     # _____________CLASS_METHODS_____________ #
     @classmethod
@@ -459,17 +495,18 @@ class Maps:
         return self
 
     def __str__(self):
-        string = '\nMaps object containing {} maps.\n'
-        string += '____________Header_____________\n'
-        string += 'N Nonzero : {}\n'
-        string += 'N voxels : {}\n'
-        string += 'N maps : {}\n'
-        string += 'Box size : ({}, {}, {})\n'
-        string += 'Affine :\n{}\n'
-        string += 'Has atlas : {}\n'
-        string += 'Map : \n{}\n'
-        string += 'Atlas Map : \n{}\n'
-        return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self._Ni, self._Nj, self._Nk, self._affine, self._has_atlas(), self.maps, self._maps_atlas)
+        return (
+            f'\nMaps object containing {self.n_m} maps.\n'
+            f'____________Header_____________\n'
+            f'N Nonzero : {self.maps.count_nonzero()}\n'
+            f'N voxels : {self.n_v}\n'
+            f'N maps : {self.n_m}\n'
+            f'Box size : ({self.Ni}, {self.Nj}, {self.Nk})\n'
+            f'Affine :\n{self.affine}\n'
+            f'Has atlas : {self._has_atlas()}\n'
+            f'Map : \n{self.maps}\n'
+            f'Atlas Map : \n{self._maps_atlas}\n'
+        )
 
     @staticmethod
     def coord_to_id(i, j, k, Ni, Nj, Nk):
@@ -506,7 +543,7 @@ class Maps:
             return
 
         atlas_data = self._flatten_array(self._atlas.data)
-        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self._Ni*self._Nj*self._Nk))
+        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self.prod_N))
 
         for k in range(self._atlas.n_labels):
             row = atlas_data == k
@@ -623,10 +660,11 @@ class Maps:
 
             Indexing of map is supposed to have been made Fortran like (first index moving fastest).
         '''
-        n_voxels, n_maps = map.shape
+        n_v, n_maps = map.shape
 
-        if n_voxels != Ni*Nj*Nk:
-            raise ValueError('Map\'s length ({}) does not match given box ({}, {}, {}) of size {}.'.format(n_voxels, Ni, Nj, Nk, Ni*Nj*Nk))
+        if n_v != Ni*Nj*Nk:
+            raise ValueError(f'Map\'s length ({n_v}) does not match given box '
+                             f'({Ni}, {Nj}, {Nk}) of size {Ni*Nj*Nk}.')
 
         return Maps.unflatten_array(map.toarray(), Ni, Nj, Nk, _4D=n_maps)
 
@@ -759,7 +797,7 @@ class Maps:
 
         return array
 
-    def to_img_atlas(self, map_id=None, ignore_bg=True):
+    def to_img_atlas(self, map_id=None, ignore_bg=False):
         '''
             Convert one atlas map into a nibabel.Nifti1Image.
 
