@@ -1115,6 +1115,29 @@ class Maps:
 
         return maps_A, maps_B
 
+    def shuffle(self, random_state=None, inplace=False):
+        """Shuffle the maps index.
+
+        Shuffle the maps index. For example, if 3 maps are stored in this
+        order (1, 2, 3), shuffling them may lead to a new order (2, 1, 3).
+
+        Arguments:
+            random_state {int} -- Used to initialize the numpy random seed.
+        """
+        np.random.seed(random_state)
+
+        new_maps = self if inplace else copy.copy(self)
+        permutation = np.random.permutation(new_maps.n_m)
+        M = scipy.sparse.lil_matrix((new_maps.n_m, new_maps.n_m))
+
+        for k in range(new_maps.n_m):
+            M[k, permutation[k]] = 1.
+        M = scipy.sparse.csr_matrix(M)
+
+        new_maps.maps = new_maps.maps.dot(M)
+
+        return new_maps
+
     # _____________STATISTICS_____________ #
     def n_peaks(self, atlas=False):
         '''

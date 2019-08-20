@@ -5,6 +5,7 @@ import nibabel as nib
 from meta_analysis import Maps
 from globals_test import affine
 
+
 class ApplyMaskTestCase(unittest.TestCase):
     def setUp(self):
         self.array = np.array([[[1, 2, 3],
@@ -26,8 +27,8 @@ class ApplyMaskTestCase(unittest.TestCase):
                                    [0, 0, 0]]])
 
         self.expected2 = np.array([[[[0, 0], [0, 0], [3, 7]],
-                                 [[0, 0], [5, 5], [0, 0]],
-                                 [[0, 0], [0, 0], [0, 0]]]])
+                                    [[0, 0], [5, 5], [0, 0]],
+                                    [[0, 0], [0, 0], [0, 0]]]])
 
         self.Ni, self.Nj, self.Nk = self.mask_data.shape
 
@@ -52,6 +53,7 @@ class ApplyMaskTestCase(unittest.TestCase):
 
         self.assertTrue(np.array_equal(maps2.to_array(0), self.expected2[:, :, :, 0]))
         self.assertTrue(np.array_equal(maps2.to_array(1), self.expected2[:, :, :, 1]))
+
 
 class NormalizeTestCase(unittest.TestCase):
     def setUp(self):
@@ -223,6 +225,7 @@ class SplitTestCase(unittest.TestCase):
         self.assertTrue(np.array_equal(maps_B.to_array(), self.array2[:, :, :, 0]) or np.array_equal(maps_B.to_array(), self.array2[:, :, :, 1]))
         self.assertFalse(np.array_equal(maps_A.to_array(), maps_B.to_array()))
 
+
 class ThresholdTestCase(unittest.TestCase):
     def setUp(self):
         self.array = np.array([[[1, 0, 0],
@@ -260,3 +263,31 @@ class ThresholdTestCase(unittest.TestCase):
         self.assertTrue(np.array_equal(maps2.to_array(1), self.expected2[:, :, :, 1]))
         self.assertTrue(np.array_equal(maps2_.to_array(0), self.expected2[:, :, :, 0]))
         self.assertTrue(np.array_equal(maps2_.to_array(1), self.expected2[:, :, :, 1]))
+
+
+class ShuffleTestCase(unittest.TestCase):
+    def setUp(self):
+        self.array = np.array([[[1, 0, 0],
+                                [0, 3, 0],
+                                [0, 0, 2]]])
+
+        self.array2 = np.array([[[[1, 0], [0, 0], [0, 0]],
+                                 [[0, 0], [3, 3], [0, 0]],
+                                 [[0, 0], [0, 0], [2, 0]]]])
+
+        self.Ni, self.Nj, self.Nk = self.array.shape
+
+    def test_one_map(self):
+        maps = Maps(self.array, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        maps_ = maps.shuffle(inplace=False)
+        maps.shuffle(inplace=True)
+
+        self.assertTrue(np.array_equal(maps.to_array(), self.array))
+        self.assertTrue(np.array_equal(maps_.to_array(), self.array))
+
+    def test_random_state(self):
+        maps = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        maps_ = maps.shuffle(random_state=0, inplace=False)
+        maps.shuffle(random_state=0, inplace=True)
+
+        self.assertTrue(np.array_equal(maps.to_array(), maps_.to_array()))
