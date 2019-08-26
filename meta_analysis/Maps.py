@@ -446,6 +446,22 @@ class Maps:
     def shape_f(self):
         return (self.n_v, self.n_m)
 
+    def set_coord(self, id, x, y, z, val):
+        """Set value to a given x y z coord"""
+
+        if id < 0 or id >= self.n_m:
+            raise ValueError(f'Map id must be in [0, {self.n_m}].')
+
+        i, j, k = self.xyz_to_ijk(x, y, z)
+        p = self._coord_to_id(i, j, k)
+        self.maps[p, id] = val
+
+    def xyz_to_ijk(self, x, y, z):
+        if self.affine is None:
+            raise ValueError('Maps object should have affine to convert xyz coords.')
+
+        inv_affine = np.linalg.inv(self.affine)
+        return np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [self.Ni-1, self.Nj-1, self.Nk-1])
     # _____________CLASS_METHODS_____________ #
     @classmethod
     def zeros(cls, n_voxels, n_maps=1, **kwargs):
