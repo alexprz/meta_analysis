@@ -7,7 +7,7 @@ from globals_test import template, Ni, Nj, Nk
 
 
 class ZerosTestCase(unittest.TestCase):
-    """Test zeros classmethod."""
+    """Test Maps.zeros classmethod."""
 
     def test_no_kwargs(self):
         """Test without kerwords."""
@@ -48,7 +48,7 @@ class ZerosTestCase(unittest.TestCase):
 
 
 class RandomTestCase(unittest.TestCase):
-    """Test random classmethod."""
+    """Test Maps.random classmethod."""
 
     def setUp(self):
         """Set up sizes."""
@@ -127,3 +127,24 @@ class RandomTestCase(unittest.TestCase):
         self.assertEqual(np.sum(arr), np.sum(self.size3))
         self.assertEqual(maps.n_m, 2)
         self.assertEqual(maps.n_v, Ni*Nj*Nk)
+
+
+class CopyHeaderTestCase(unittest.TestCase):
+    """Test Maps.copy_header classmethod."""
+
+    def test_template(self):
+        """Test copy from template."""
+        maps1 = Maps(template=template)
+        maps2 = Maps.copy_header(maps1)
+        self.assertEqual(maps1.Ni, maps2.Ni)
+        self.assertEqual(maps1.Nj, maps2.Nj)
+        self.assertEqual(maps1.Nk, maps2.Nk)
+        self.assertTrue(np.array_equal(maps1.affine, maps2.affine))
+
+    def test_manual(self):
+        """Test copy from Ni Nj Nk."""
+        maps1 = Maps(Ni=Ni, Nj=Nj, Nk=Nk)
+        maps2 = Maps.copy_header(maps1)
+        self.assertEqual(maps1.Ni, maps2.Ni)
+        self.assertEqual(maps1.Nj, maps2.Nj)
+        self.assertEqual(maps1.Nk, maps2.Nk)

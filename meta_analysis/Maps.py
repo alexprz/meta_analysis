@@ -502,15 +502,16 @@ class Maps:
 
     @classmethod
     def copy_header(cls, other):
-        '''
-            Create a Maps instance with same header as the passed Maps object.
+        """
+        Create a Maps instance with same header as given Maps object.
 
-            Args:
-                other (Maps): Maps instance wanted informations.
+        Args:
+            other (Maps): Maps instance wanted informations.
 
-            Returns:
-                (Maps)
-        '''
+        Returns:
+            (Maps) Instance of Maps object.
+
+        """
         maps = cls(Ni=other._Ni, Nj=other._Nj, Nk=other._Nk)
         maps._copy_header(other)
         return maps
