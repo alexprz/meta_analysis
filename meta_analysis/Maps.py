@@ -464,6 +464,19 @@ class Maps:
 
     # _____________CLASS_METHODS_____________ #
     @classmethod
+    def empty(cls, **kwargs):
+        """
+        Create an empty Maps object.
+
+        See Maps.__init__ doc for valid kwargs.
+
+        Returns:
+            (Maps) Instance of Maps object.
+
+        """
+        return cls(df=None, **kwargs)
+
+    @classmethod
     def zeros(cls, n_maps=1, **kwargs):
         """
         Create zero-valued maps of the given shape.
@@ -477,7 +490,7 @@ class Maps:
             (Maps) Instance of Maps object.
 
         """
-        maps = cls(df=None, **kwargs)  # Build empty maps
+        maps = cls.empty(**kwargs)
         maps.maps = csr_matrix((maps.prod_N, n_maps), dtype=maps._dtype)
         return maps
 
@@ -497,7 +510,7 @@ class Maps:
             (Maps) Instance of Maps object.
 
         """
-        maps = cls(**kwargs)
+        maps = cls.empty(**kwargs)
         return maps.randomize(size, p=p, override_mask=False, inplace=True)
 
     @classmethod

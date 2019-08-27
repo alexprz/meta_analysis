@@ -3,7 +3,25 @@ import unittest
 import numpy as np
 
 from meta_analysis import Maps
-from globals_test import template, Ni, Nj, Nk
+from globals_test import template, Ni, Nj, Nk, affine
+
+
+class EmptyTestCase(unittest.TestCase):
+    """Test Maps.empty classmethod."""
+
+    def test_no_kwargs(self):
+        """Test without kerwords."""
+        with self.assertRaises(TypeError):
+            Maps.empty()
+
+    def test_template(self):
+        """Test from template."""
+        maps = Maps.empty(template=template)
+        self.assertEqual(maps.Ni, Ni)
+        self.assertEqual(maps.Nj, Nj)
+        self.assertEqual(maps.Nk, Nk)
+        self.assertTrue(np.array_equal(maps.affine, affine))
+        self.assertTrue(maps.maps is None)
 
 
 class ZerosTestCase(unittest.TestCase):
