@@ -383,7 +383,7 @@ class Maps:
 
     @maps.setter
     def maps(self, maps):
-        if not scipy.sparse.issparse(maps):
+        if not scipy.sparse.issparse(maps) or maps.getformat() != 'csr':
             maps = scipy.sparse.csr_matrix(maps)
 
         self._maps = maps.astype(self._dtype)
