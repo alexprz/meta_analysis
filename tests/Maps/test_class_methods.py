@@ -166,3 +166,35 @@ class CopyHeaderTestCase(unittest.TestCase):
         self.assertEqual(maps1.Ni, maps2.Ni)
         self.assertEqual(maps1.Nj, maps2.Nj)
         self.assertEqual(maps1.Nk, maps2.Nk)
+
+
+class ConcatenateTestCase(unittest.TestCase):
+    """Test Maps.concatenate classmethod."""
+
+    def setUp(self):
+        """Set up arrays."""
+        self.Ni, self.Nj, self.Nk = 1, 1, 3
+        self.arr1 = np.array([[1, 2, 3]]).T
+        self.arr2 = np.array([[4, 5, 6]]).T
+        self.arr3 = np.concatenate((self.arr1, self.arr2))
+
+    def test_empty(self):
+        """Test empty sequence."""
+        with self.assertRaises(ValueError):
+            Maps.concatenate(())
+
+    def test_one_map(self):
+        """Test one map."""
+        maps1 = Maps(self.arr1, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        maps2 = Maps.concatenate((maps1,))
+
+        self.assertTrue(np.array_equal(maps2.maps.toarray(), self.arr1))
+
+    def test_two_maps(self):
+        """Test two maps."""
+        maps1 = Maps(self.arr1, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+        maps2 = Maps(self.arr2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
+
+        maps3 = Maps.concatenate((maps1, maps2))
+
+        self.assertTrue(np.array_equal(maps3.maps.toarray(), self.arr3))

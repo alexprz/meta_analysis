@@ -7,7 +7,7 @@ import nibabel as nib
 import pandas as pd
 from scipy.ndimage import gaussian_filter
 from sklearn.covariance import LedoitWolf
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, vstack
 
 from .globals import mem
 from .tools import print_percent
@@ -528,6 +528,32 @@ class Maps:
         maps = cls(Ni=other._Ni, Nj=other._Nj, Nk=other._Nk)
         maps._copy_header(other)
         return maps
+
+    @classmethod
+    def concatenate(cls, seq):
+        """
+        Concatenate given sequence of Maps object.
+
+        For example if the first object contains 1 map and the
+        second 2 maps, the concatenated object contains the 3 stacked maps.
+
+        Args:
+            seq (sequence): Sequence of Maps object to concatenate.
+
+        Returns:
+            (Maps) Instance of Maps object
+
+        Raises:
+            ValueError: If shapes of maps missmatch or empty sequence.
+
+        """
+        if not seq:
+            raise ValueError('Empty sequence given.')
+
+        res = Maps.copy_header(seq[0])
+        res.maps = vstack([maps.maps for maps in seq])
+
+        return res
 
     # _____________PRIVATE_TOOLS_____________ #
     def _copy_header(self, other):
