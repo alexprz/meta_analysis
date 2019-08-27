@@ -146,6 +146,13 @@ class RandomTestCase(unittest.TestCase):
         self.assertEqual(maps.n_m, 2)
         self.assertEqual(maps.n_v, Ni*Nj*Nk)
 
+    def test_random_seed(self):
+        """Test if obtain same results with same seeds."""
+        maps1 = Maps.random(self.size3, Ni=Ni, Nj=Nj, Nk=Nk, random_state=0)
+        maps2 = Maps.random(self.size3, Ni=Ni, Nj=Nj, Nk=Nk, random_state=0)
+
+        self.assertTrue(np.array_equal(maps1.to_array(), maps2.to_array()))
+
 
 class CopyHeaderTestCase(unittest.TestCase):
     """Test Maps.copy_header classmethod."""

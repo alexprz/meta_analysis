@@ -495,7 +495,7 @@ class Maps:
         return maps
 
     @classmethod
-    def random(cls, size, p=None, **kwargs):
+    def random(cls, size, p=None, random_state=None, **kwargs):
         """
         Create random maps from given size.
 
@@ -511,7 +511,13 @@ class Maps:
 
         """
         maps = cls.empty(**kwargs)
-        return maps.randomize(size, p=p, override_mask=False, inplace=True)
+        return maps.randomize(
+            size,
+            p=p,
+            override_mask=False,
+            inplace=True,
+            random_state=random_state
+        )
 
     @classmethod
     def copy_header(cls, other):
@@ -971,9 +977,15 @@ class Maps:
 
         return new_maps
 
-    def randomize(self, size, p=None, override_mask=False, inplace=False):
-        '''
-        Randomize the maps by sampling n_peaks of weight 1 (may overlap) over n_maps maps.
+    def randomize(self,
+                  size,
+                  p=None,
+                  override_mask=False,
+                  inplace=False,
+                  random_state=None
+                  ):
+        """
+        Randomize maps from based on given size.
 
         Args:
             size: int or size 2 tuple or 1D numpy.ndarray.
@@ -994,7 +1006,10 @@ class Maps:
 
         Returns:
             (Maps instance) Self or a copy depending on inplace.
-        '''
+
+        """
+        np.random.seed(random_state)
+
         if self._Ni is None or self._Nj is None or self._Nk is None:
             raise ValueError('Invalid box size ({}, {}, {}).'.format(self._Ni, self._Nj, self._Nk))
 
