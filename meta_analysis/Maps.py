@@ -1181,13 +1181,27 @@ class Maps:
         return new_maps
 
     def split(self, prop=0.5, random_state=None):
+        """
+        Split maps randomly  based on the given proportion.
+
+        Args:
+            prop(float): proportion of maps to assign in first set.
+            random_state(int): seed to initialise numpy.random.seed.
+
+        Returns:
+            (tuple): Size 2 tuple of Maps object. The first contains
+                approximatively the given proportion of the total maps.
+
+        """
         np.random.seed(random_state)
 
         maps_A = Maps.copy_header(self)
         maps_B = Maps.copy_header(self)
 
-        id_sub_maps_A = np.sort(np.random.choice(np.arange(self.n_maps), np.ceil(prop*self.n_maps).astype(int), replace=False))
-        id_sub_maps_B = np.sort(np.delete(np.arange(self.n_maps), id_sub_maps_A))
+        n_A = np.ceil(prop*self.n_maps).astype(int)  # Nb elements in subset A
+        omega = np.arange(self.n_maps)
+        id_sub_maps_A = np.sort(np.random.choice(omega, n_A, replace=False))
+        id_sub_maps_B = np.sort(np.delete(omega, id_sub_maps_A))
 
         def filter_matrix(array):
             M = scipy.sparse.lil_matrix((self.n_maps, array.shape[0]))
