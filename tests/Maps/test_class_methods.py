@@ -1,4 +1,6 @@
+"""Test the classmethods of Maps."""
 import unittest
+import numpy as np
 
 from meta_analysis import Maps
 from globals_test import template, Ni, Nj, Nk
@@ -9,7 +11,7 @@ class ZerosTestCase(unittest.TestCase):
 
     def test_no_kwargs(self):
         """Test without kerwords."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             Maps.zeros()
 
     def test_one_map_template(self):
@@ -44,3 +46,84 @@ class ZerosTestCase(unittest.TestCase):
         self.assertEqual(maps.n_m, 2)
         self.assertEqual(maps.n_v, Ni*Nj*Nk)
 
+
+class RandomTestCase(unittest.TestCase):
+    """Test random classmethod."""
+
+    def setUp(self):
+        """Set up sizes."""
+        self.size1 = 10
+        self.size1_bis = 10
+        self.size2 = (10, 2)
+        self.size3 = np.array([10, 5])
+
+    def test_no_kwargs(self):
+        """Test without keywords."""
+        with self.assertRaises(TypeError):
+            Maps.random(size=None)
+
+    def test_one_map_template(self):
+        """Test creating one map from template."""
+        maps = Maps.random(self.size1, template=template)
+        arr = maps.to_array()
+        self.assertEqual(np.sum(arr), self.size1)
+        self.assertEqual(maps.n_m, 1)
+        self.assertEqual(maps.n_v, Ni*Nj*Nk)
+
+    def test_one_map_manual(self):
+        """Test creating one map from Ni Nj Nk."""
+        maps = Maps.random(self.size1, Ni=Ni, Nj=Nj, Nk=Nk)
+        arr = maps.to_array()
+        self.assertEqual(np.sum(arr), self.size1)
+        self.assertEqual(maps.n_m, 1)
+        self.assertEqual(maps.n_v, Ni*Nj*Nk)
+
+    def test_one_map_bis_template(self):
+        """Test creating one map from template."""
+        maps = Maps.random(self.size1_bis, template=template)
+        arr = maps.to_array()
+        self.assertEqual(np.sum(arr), self.size1)
+        self.assertEqual(maps.n_m, 1)
+        self.assertEqual(maps.n_v, Ni*Nj*Nk)
+
+    def test_one_map_bis_manual(self):
+        """Test creating one map from Ni Nj Nk."""
+        maps = Maps.random(self.size1_bis, Ni=Ni, Nj=Nj, Nk=Nk)
+        arr = maps.to_array()
+        self.assertEqual(np.sum(arr), self.size1)
+        self.assertEqual(maps.n_m, 1)
+        self.assertEqual(maps.n_v, Ni*Nj*Nk)
+
+    def test_two_maps_template(self):
+        """Test creating several maps from template."""
+        maps = Maps.random(self.size2, template=template)
+        arr = maps.to_array()
+        n_peaks, n_maps = self.size2
+        self.assertEqual(np.sum(arr), n_peaks)
+        self.assertEqual(maps.n_m, n_maps)
+        self.assertEqual(maps.n_v, Ni*Nj*Nk)
+
+    def test_two_maps_manual(self):
+        """Test creating several maps from Ni Nj Nk."""
+        maps = Maps.random(self.size2, Ni=Ni, Nj=Nj, Nk=Nk)
+        arr = maps.to_array()
+        n_peaks, n_maps = self.size2
+        self.assertEqual(np.sum(arr), n_peaks)
+        self.assertEqual(maps.n_m, n_maps)
+        self.assertEqual(maps.n_v, Ni*Nj*Nk)
+
+    def test_two_maps_array_template(self):
+        """Test creating several maps from template."""
+        maps = Maps.random(self.size3, template=template)
+        arr = maps.to_array()
+        self.assertEqual(np.sum(arr), np.sum(self.size3))
+        self.assertEqual(maps.n_m, 2)
+        self.assertEqual(maps.n_v, Ni*Nj*Nk)
+
+    def test_two_maps_array_manual(self):
+        """Test creating several maps from Ni Nj Nk."""
+        maps = Maps.random(self.size3, Ni=Ni, Nj=Nj, Nk=Nk)
+        arr = maps.to_array()
+        self.assertEqual(np.sum(arr), np.sum(self.size3))
+        self.assertEqual(maps.n_m, 2)
+        self.assertEqual(maps.n_v, Ni*Nj*Nk)

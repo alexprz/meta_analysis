@@ -1,6 +1,4 @@
-'''
-    TEST
-'''
+"""Maps class."""
 import scipy
 import copy
 import nilearn
@@ -328,10 +326,10 @@ class Maps:
             self._maps = None
 
         elif not isinstance(df, Maps):
-            raise ValueError(f'First argument not understood : {type(df)}')
+            raise TypeError(f'First argument not understood : {type(df)}')
 
         if Ni is None or Nj is None or Nk is None:
-            raise ValueError('Must either specify Ni, Nj, Nk or template.')
+            raise TypeError('Must either specify Ni, Nj, Nk or template.')
 
         self._Ni = Ni
         self._Nj = Nj
@@ -467,26 +465,40 @@ class Maps:
     # _____________CLASS_METHODS_____________ #
     @classmethod
     def zeros(cls, n_maps=1, **kwargs):
-        '''
-            Create empty maps of the given shape.
-            See the Maps.__init__ doc for **kwargs parameters.
-        '''
+        """
+        Create zero-valued maps of the given shape.
+
+        See the Maps.__init__ doc for **kwargs parameters.
+
+        Args:
+            n_maps (int, Optional): Number of maps.
+
+        Returns:
+            (Maps) Instance of Maps object.
+
+        """
         maps = cls(df=None, **kwargs)  # Build empty maps
-        n_voxels = maps.Ni*maps.Nj*maps.Nk
-        maps.maps = csr_matrix((n_voxels, n_maps), dtype=maps._dtype)
+        maps.maps = csr_matrix((maps.prod_N, n_maps), dtype=maps._dtype)
         return maps
 
     @classmethod
-    def random(cls, n_peaks, n_maps, Ni=None, Nj=None, Nk=None, affine=None, template=None, mask=None, atlas=None, p=None):
-        '''
-            Create the given number of maps and sample peaks on them.
+    def random(cls, size, p=None, **kwargs):
+        """
+        Create random maps from given size.
 
-            See the Maps.__init__ doc for Ni, Nj, Nk, mask, atlas parameters.
-            See the Maps.randomize doc for n_peaks, n_maps, p parameters.
-        '''
-        maps = cls(df=None, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, template=template, mask=mask, atlas=atlas)
+        Must give appropriates kwargs to initialize an empty map.
+        See the Maps.__init__ doc.
 
-        return maps.randomize(n_peaks, n_maps, p=p, use_mask=(mask is not None), inplace=True)
+        Args:
+            size: See the Maps.randomize doc.
+            p: See the Maps.randomize doc.
+
+        Returns:
+            (Maps) Instance of Maps object.
+
+        """
+        maps = cls(**kwargs)
+        return maps.randomize(size, p=p, override_mask=False, inplace=True)
 
     @classmethod
     def copy_header(cls, other):
