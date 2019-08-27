@@ -181,9 +181,9 @@ class ConcatenateTestCase(unittest.TestCase):
     def setUp(self):
         """Set up arrays."""
         self.Ni, self.Nj, self.Nk = 1, 1, 3
-        self.arr1 = np.array([[1, 2, 3]]).T
-        self.arr2 = np.array([[4, 5, 6]]).T
-        self.arr3 = np.concatenate((self.arr1, self.arr2))
+        self.arr1 = np.array([[1], [2], [3]])
+        self.arr2 = np.array([[4], [5], [6]])
+        self.arr3 = np.array([[1, 4], [2, 5], [3, 6]])
 
     def test_empty(self):
         """Test empty sequence."""

@@ -7,7 +7,7 @@ import nibabel as nib
 import pandas as pd
 from scipy.ndimage import gaussian_filter
 from sklearn.covariance import LedoitWolf
-from scipy.sparse import csr_matrix, vstack
+from scipy.sparse import csr_matrix, hstack
 
 from .globals import mem
 from .tools import print_percent
@@ -557,7 +557,7 @@ class Maps:
             raise ValueError('Empty sequence given.')
 
         res = Maps.copy_header(seq[0])
-        res.maps = vstack([maps.maps for maps in seq])
+        res.maps = hstack([maps.maps for maps in seq])
 
         return res
 
