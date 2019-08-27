@@ -9,6 +9,7 @@ import nibabel as nib
 import pandas as pd
 from scipy.ndimage import gaussian_filter
 from sklearn.covariance import LedoitWolf
+from scipy.sparse import csr_matrix
 
 from .globals import mem
 from .tools import print_percent
@@ -462,14 +463,18 @@ class Maps:
 
         inv_affine = np.linalg.inv(self.affine)
         return np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [self.Ni-1, self.Nj-1, self.Nk-1])
+
     # _____________CLASS_METHODS_____________ #
     @classmethod
-    def zeros(cls, n_voxels, n_maps=1, **kwargs):
+    def zeros(cls, n_maps=1, **kwargs):
         '''
             Create empty maps of the given shape.
             See the Maps.__init__ doc for **kwargs parameters.
         '''
-        return cls(df=(n_voxels, n_maps), **kwargs)
+        maps = cls(df=None, **kwargs)  # Build empty maps
+        n_voxels = maps.Ni*maps.Nj*maps.Nk
+        maps.maps = csr_matrix((n_voxels, n_maps), dtype=maps._dtype)
+        return maps
 
     @classmethod
     def random(cls, n_peaks, n_maps, Ni=None, Nj=None, Nk=None, affine=None, template=None, mask=None, atlas=None, p=None):
