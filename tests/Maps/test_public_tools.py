@@ -3,7 +3,7 @@ import numpy as np
 import nibabel as nib
 
 from meta_analysis import Maps
-from globals_test import affine
+from globals_test import affine, maps
 
 
 class ApplyMaskTestCase(unittest.TestCase):
@@ -225,6 +225,16 @@ class SplitTestCase(unittest.TestCase):
         self.assertTrue(np.array_equal(maps_B.to_array(), self.array2[:, :, :, 0]) or np.array_equal(maps_B.to_array(), self.array2[:, :, :, 1]))
         self.assertFalse(np.array_equal(maps_A.to_array(), maps_B.to_array()))
 
+    def test_random_state(self):
+        maps_A1, maps_B1 = maps.split(prop=0.5, random_state=0)
+        maps_A2, maps_B2 = maps.split(prop=0.5, random_state=0)
+
+        print(maps_A1.to_array())
+        print(maps_A2.to_array())
+
+        self.assertTrue(np.array_equal(maps_A1.to_array(), maps_A2.to_array()))
+        self.assertTrue(np.array_equal(maps_B1.to_array(), maps_B2.to_array()))
+
 
 class ThresholdTestCase(unittest.TestCase):
     def setUp(self):
@@ -291,3 +301,9 @@ class ShuffleTestCase(unittest.TestCase):
         maps.shuffle(random_state=0, inplace=True)
 
         self.assertTrue(np.array_equal(maps.to_array(), maps_.to_array()))
+
+    def test_avg(self):
+        avg1 = maps.avg().smooth(sigma=2.)
+        avg2 = maps.shuffle().avg().smooth(sigma=2.)
+
+        self.assertTrue(np.allclose(avg1.to_array(), avg2.to_array()))
