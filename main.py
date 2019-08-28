@@ -44,8 +44,8 @@ if __name__ == '__main__':
 
     n_peaks = len(df.index)
     threshold = thr.threshold_MC(n_peaks, maps.n_maps, maps._Ni, maps._Nj,
-                                 maps._Nk, N_simulations=N_sim, sigma=sigma,
-                                 mask=gray_mask)
+                                 maps._Nk, N_sim=N_sim, sigma=sigma,
+                                 mask=gray_mask, verbose=True)
 
     plotting.plot_activity_map(avg_smoothed.to_img(),
                                title='Avg smoothed thresholded',
