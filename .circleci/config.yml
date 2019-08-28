@@ -33,6 +33,8 @@ jobs:
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
+            pip install coverage --user
+            echo $HOME
 
       - save_cache:
           paths:
@@ -48,9 +50,13 @@ jobs:
           name: run tests
           command: |
             . venv/bin/activate
-            python -m pytest --mpl
+            $HOME/.local/bin/coverage run -m pytest --mpl
+            $Home/.local/bin coverage report
+            $Home/.local/bin coverage html
           environment:
             MPL_BACKEND: Agg
+      - store_artifacts:
+          path: htmlcov
 
       - store_artifacts:
           path: test-reports
