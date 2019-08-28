@@ -223,6 +223,8 @@ class Atlas:
 
 
 class Maps:
+    """Store data of several maps and implement operations on it."""
+
     def __init__(self, df=None,
                  template=None,
                  Ni=None, Nj=None, Nk=None,
@@ -238,7 +240,7 @@ class Maps:
                  verbose=False,
                  dtype=np.float64
                  ):
-        '''
+        """
         Args:
             df (pandas.DataFrame): Pandas DataFrame containing the (x,y,z) coordinates, the weights and the map id. The names of the columns can be specified.
             template (nibabel.Nifti1Image): Template storing the box size and affine. If not None, Will overwrite parameters Ni, Nj, Nk and affine.
@@ -253,7 +255,8 @@ class Maps:
             y_col (str): Name of the column storing the y coordinates.
             z_col (str): Name of the column storing the z coordinates.
             weight_col (str): Name of the column storing the weights.
-        '''
+
+        """
 
         if template is not None and (isinstance(template, nib.Nifti1Image) or isinstance(template, str)):
             template = nilearn.image.load_img(template)
@@ -284,13 +287,15 @@ class Maps:
         self._maps_atlas = None
         self._atlas_filter_matrix = None
         self._dtype = dtype
+        self.verbose = verbose
 
         if isinstance(df, pd.DataFrame):
             if groupby_col is None:
-                raise ValueError('Must specify column name to group by maps.')
+                raise TypeError('Must specify column name to group by maps.')
 
             if Ni is None or Nj is None or Nk is None or affine is None:
-                raise ValueError('Must specify Ni, Nj, Nk and affine to initialize with dataframe.')
+                raise TypeError('Must specify Ni, Nj, Nk and affine to'
+                                'initialize with dataframe.')
 
             col_names = {
                 'groupby': groupby_col,
@@ -300,7 +305,7 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, verbose, self._dtype)
+            self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, self.verbose, self._dtype)
 
         elif isinstance(df, nib.Nifti1Image) or isinstance(df, str) or isinstance(df, list):
             self._maps, Ni, Nj, Nk, affine = build_maps_from_img(df, dtype=self._dtype)
@@ -338,7 +343,7 @@ class Maps:
 
         if self._mask_dimensions_missmatch():
             raise ValueError(f'Mask dimensions missmatch. Given box size is '
-                             f'({self._Ni}, {self.Nj}, {self.Nk}) whereas '
+                             f'({self.Ni}, {self.Nj}, {self.Nk}) whereas '
                              f'mask size is {self._mask.get_fdata().shape}. '
                              f'Consider resampling either input data or mask.')
 
@@ -351,7 +356,7 @@ class Maps:
         if self._box_dimensions_missmatch():
             raise ValueError(f'Box dimension missmatch. Given box size is '
                              f'({self.Ni}, {self.Nj}, {self.Nk}) for '
-                             f'{self.prod_N()} voxels whereas maps '
+                             f'{self.prod_N} voxels whereas maps '
                              f'has shape {self._maps.shape}.')
 
         if self._has_mask():
@@ -705,6 +710,14 @@ class Maps:
 
         return True
 
+    def _should_verbose(self, verbose):
+        if verbose is None:
+            if self.verbose is None:
+                return False
+            return self.verbose
+
+        return verbose
+
     # _____________OPERATORS_____________ #
 
     def __iadd__(self, val):
@@ -798,6 +811,8 @@ class Maps:
         '''
         if self._affine is None:
             raise ValueError('Must specify affine to convert maps to img.')
+
+        verbose = self._should_verbose(verbose)
 
         maps = self._maps
         if map_id is not None:
@@ -1142,6 +1157,8 @@ class Maps:
                 verbose (bool, optional): If True print logs.
 
         '''
+        verbose = self._should_verbose(verbose)
+
         if map_id is None:
             map_ids = range(self.n_maps)
         else:
@@ -1396,6 +1413,8 @@ class Maps:
         if not bias and self.n_maps <= 1:
             raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self.n_maps))
 
+        verbose = self._should_verbose(verbose)
+
         maps = self._get_maps(atlas=atlas)
         ddof = 0 if bias else 1
 
@@ -1460,6 +1479,7 @@ class Maps:
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
             (Less memory usage).
         '''
+        verbose = self._should_verbose(verbose)
 
         if not compute_var:
             return self.avg().smooth(sigma=sigma), None

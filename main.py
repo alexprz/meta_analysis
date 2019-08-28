@@ -28,8 +28,8 @@ if __name__ == '__main__':
     df = build_df_from_keyword(keyword)
 
     maps = Maps(df, template=template, groupby_col='pmid', mask=gray_mask,
-                atlas=atlas)
-    maps.smooth(sigma=sigma, inplace=True, verbose=True)
+                atlas=atlas, verbose=True)
+    maps.smooth(sigma=sigma, inplace=True)
 
     avg = maps.avg()
     var = maps.var()
@@ -40,13 +40,12 @@ if __name__ == '__main__':
     plt.show()
 
     # 2: Thresholded maps
-    avg_smoothed, var_smoothed = maps.iterative_smooth_avg_var(sigma=sigma,
-                                                               verbose=True)
+    avg_smoothed, var_smoothed = maps.iterative_smooth_avg_var(sigma=sigma)
 
     n_peaks = len(df.index)
     threshold = thr.threshold_MC(n_peaks, maps.n_maps, maps._Ni, maps._Nj,
                                  maps._Nk, N_simulations=N_sim, sigma=sigma,
-                                 verbose=True, mask=gray_mask)
+                                 mask=gray_mask)
 
     plotting.plot_activity_map(avg_smoothed.to_img(),
                                title='Avg smoothed thresholded',
