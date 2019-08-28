@@ -49,6 +49,8 @@ jobs:
           command: |
             . venv/bin/activate
             python -m pytest --mpl
+          environment:
+            MPL_BACKEND: Agg
 
       - store_artifacts:
           path: test-reports
