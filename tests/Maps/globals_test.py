@@ -9,6 +9,7 @@ import nilearn
 import copy
 
 from meta_analysis import Maps
+from tools import build_df_from_keyword
 
 max_box_width = 10
 max_maps = 5
@@ -30,7 +31,7 @@ atlas_2['maps'] = nilearn.image.resample_img(nilearn.image.load_img(atlas['maps'
 gray_mask_2 = nilearn.image.resample_img(gray_mask, fmri_img.affine, fmri_img.shape[:-1])
 
 groupby_col = 'map__id'
-df = pd.DataFrame(np.array([['mymap', -3, 42, 12, 1], ['mymap', -3, 42, 12, 1], ['mymap2', -3, 42, 12, 1]]), columns=['map__id', 'x', 'y', 'z', 'weight'])
+df_ex = pd.DataFrame(np.array([['mymap', -3, 42, 12, 1], ['mymap', -3, 42, 12, 1], ['mymap2', -3, 42, 12, 1]]), columns=['map__id', 'x', 'y', 'z', 'weight'])
 
 array2D = np.random.rand(Ni*Nj*Nk, 2)
 array3D = np.random.rand(Ni, Nj, Nk)
@@ -42,7 +43,14 @@ array3D_missmatch = np.random.rand(Ni, Nj, Nk-1)
 array4D_1_missmatch = np.random.rand(Ni-1, Nj, Nk, 1)
 array4D_2_missmatch = np.random.rand(Ni, Nj-1, Nk, 2)
 
-example_maps = Maps(df, template=template, groupby_col=groupby_col)
+example_maps = Maps(df_ex, template=template, groupby_col=groupby_col)
+
+keyword = 'prosopagnosia'
+sigma = 2.
+df = build_df_from_keyword(keyword)
+maps = Maps(df, template=template, groupby_col='pmid')
+# avg = maps.avg().smooth(sigma=sigma)
+
 
 @strats.composite
 def random_permitted_case_3D(draw):

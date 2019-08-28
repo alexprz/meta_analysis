@@ -1,21 +1,20 @@
-'''
-    TEST
-'''
-import scipy, copy, nilearn
+"""Maps class."""
+import scipy
+import copy
+import nilearn
 import numpy as np
 import nibabel as nib
 import pandas as pd
-import nilearn
 from scipy.ndimage import gaussian_filter
 from sklearn.covariance import LedoitWolf
-from nilearn import datasets
+from scipy.sparse import csr_matrix, hstack
 
 from .globals import mem
-
-from .tools import print_percent, index_3D_to_1D
+from .tools import print_percent
 
 import multiprocessing
 from joblib import Parallel, delayed
+
 
 def compute_maps(df, **kwargs):
     '''
@@ -36,6 +35,7 @@ def compute_maps(df, **kwargs):
     n_maps = kwargs['n_maps']
     mask = kwargs['mask']
     verbose = kwargs['verbose']
+    dtype = kwargs['dtype']
 
     col_names = kwargs['col_names']
     groupby_col = col_names['groupby']
@@ -44,32 +44,33 @@ def compute_maps(df, **kwargs):
     z_col = col_names['z']
     weight_col = col_names['weight']
 
-    maps = scipy.sparse.lil_matrix((n_maps, Ni*Nj*Nk))
+    maps = scipy.sparse.lil_matrix((n_maps, Ni*Nj*Nk), dtype=dtype)
 
     n_tot = df.shape[0]
     for i_row, row in enumerate(zip(df[groupby_col], df[x_col], df[y_col], df[z_col], df[weight_col])):
-        print_percent(i_row, n_tot, string='Loading dataframe {0:.1f}%...', verbose=verbose)
+        print_percent(i_row, n_tot, string='Loading dataframe {0:.1f}%...', verbose=verbose, prefix='Maps')
 
         groupby_id, x, y, z, weight = row
         map_id = index_dict[groupby_id]
 
         i, j, k = np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [Ni-1, Nj-1, Nk-1])
-        
+
         if mask is None or mask[i, j, k] == 1:
             p = Maps.coord_to_id(i, j, k, Ni, Nj, Nk)
             maps[map_id, p] += weight
 
     return scipy.sparse.csr_matrix(maps)
 
+
 @mem.cache
-def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=False):
+def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=None, dtype=np.float32):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
         reduce : integer, reducing scale factor. Ex : if reduce=2, aggregates voxels every 2 voxels in each direction.
                 Notice that this affects the affine and box size.
 
-        Returns 
+        Returns:
             maps: sparse CSR matrix of shape (n_voxels, n_maps) containing all the related flattenned maps where
                     n_maps is the number of pmids related to the keyword
                     n_voxels is the number of voxels in the box (may have changed if reduce != 1)
@@ -78,22 +79,22 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
     '''
 
     df = df.astype({col_names['x']: 'float64',
-               col_names['y']: 'float64',
-               col_names['z']: 'float64',
-               col_names['weight']: 'float64',
-               })
+                    col_names['y']: 'float64',
+                    col_names['z']: 'float64',
+                    col_names['weight']: 'float64',
+                    })
 
     # Creating map index
     unique_pmid = df[col_names['groupby']].unique()
     n_maps = len(unique_pmid)
-    index_dict = {k:v for v, k in enumerate(unique_pmid)}
+    index_dict = {k: v for v, k in enumerate(unique_pmid)}
 
     # LIL format allows faster incremental construction of sparse matrix
-    maps = scipy.sparse.csr_matrix((n_maps, Ni*Nj*Nk))
+    maps = scipy.sparse.csr_matrix((n_maps, Ni*Nj*Nk), dtype=dtype)
 
     # Multiprocessing maps computation
     n_jobs = multiprocessing.cpu_count()//2
-    splitted_df= np.array_split(df, n_jobs, axis=0)
+    splitted_df = np.array_split(df, n_jobs, axis=0)
 
     kwargs = {
         'Ni': Ni,
@@ -104,20 +105,23 @@ def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=Fal
         'n_maps': n_maps,
         'col_names': col_names,
         'mask': None if mask is None else mask.get_fdata(),
-        'verbose': verbose
+        'verbose': verbose,
+        'dtype': dtype
     }
-    
+
     results = Parallel(n_jobs=n_jobs, backend='multiprocessing')(delayed(compute_maps)(sub_df, **kwargs) for sub_df in splitted_df)
-    
-    if verbose: print('Merging...')
-    for m in results:
+
+    for k, m in enumerate(results):
+        if verbose:
+            print_percent(k, n_jobs, string='Merging... {0:.2f}%', prefix='Maps')
         maps += m
 
     maps = maps.transpose()
-    
+
     return maps
 
-def build_maps_from_img(img):
+
+def build_maps_from_img(img, dtype=np.float32):
     img = nilearn.image.load_img(img)
     n_dims = len(img.get_data().shape)
 
@@ -131,18 +135,23 @@ def build_maps_from_img(img):
     else:
         raise ValueError('Image not supported. Must be a 3D or 4D image.')
 
-    data = Maps.flatten_array(img.get_data(), _2D=n_maps)
+    data = Maps.flatten_array(img.get_data(), _2D=n_maps).astype(dtype)
     maps = scipy.sparse.csr_matrix(data)
 
     return maps, Ni, Nj, Nk, img.affine
 
+
 class Atlas:
-    def __init__(self, atlas):
+    def __init__(self, atlas=None, bg_label='Background'):
         self.atlas = None
         self.atlas_img = None
         self.data = None
         self.labels = None
         self.n_labels = None
+        self.bg_label = bg_label
+        self.bg_index = None
+        self.labels_without_bg = None
+        self.labels_range_without_bg = None
 
         if atlas is None:
             return
@@ -151,27 +160,87 @@ class Atlas:
         self.atlas_img = nilearn.image.load_img(atlas['maps'])
         self.data = self.atlas_img.get_fdata()
         self.labels = atlas['labels']
+        self.labels_range = list(range(len(self.labels)))
         self.n_labels = len(self.labels)
+
+        self.set_bg_labels(bg_label)
+
+    def has_background(self):
+        return self.bg_index is not None
+
+    def get_labels(self, ignore_bg=False, bg_label=None):
+        labels, labels_without_bg = self.labels, self.labels_without_bg
+
+        if bg_label is not None:
+            _, labels_without_bg, _ = self.get_bg_labels(bg_label)
+
+        if not ignore_bg:
+            return labels
+
+        if self.has_background():
+            return labels_without_bg
+
+        print(f'No background label matching \'{bg_label}\' in given atlas. '
+              'Consider specifying background label. ignore_bg ignored')
+
+        return labels
+
+    def get_labels_range(self, ignore_bg=False, bg_label=None):
+        labels_range, labels_range_without_bg = self.labels_range, self.labels_range_without_bg
+
+        if bg_label is not None:
+            _, _, labels_range_without_bg = self.get_bg_labels(bg_label)
+
+        if not ignore_bg:
+            return labels_range
+
+        if self.has_background():
+            return labels_range_without_bg
+
+        print(f'No background label matching \'{bg_label}\' in given atlas. '
+              'Consider specifying background label. ignore_bg ignored')
+
+        return labels_range
+
+    def set_bg_labels(self, bg_label):
+        self.bg_index, self.labels_without_bg, self.labels_range_without_bg = self.get_bg_labels(bg_label)
+
+    def get_bg_labels(self, bg_label):
+
+        try:
+            bg_index = self.labels.index(bg_label)
+
+            labels_without_bg = copy.copy(self.labels)
+            labels_range_without_bg = copy.copy(self.labels_range)
+
+            del labels_without_bg[bg_index]
+            del labels_range_without_bg[bg_index]
+
+        except ValueError:
+            bg_index, labels_without_bg, labels_range_without_bg = None, None, None
+
+        return bg_index, labels_without_bg, labels_range_without_bg
 
 
 class Maps:
+    """Store data of several maps and implement operations on it."""
+
     def __init__(self, df=None,
-                       template=None,
-                       Ni=None, Nj=None, Nk=None,
-                       affine=None,
-                       mask=None,
-                       atlas=None,
-                       groupby_col=None,
-                       x_col='x',
-                       y_col='y',
-                       z_col='z',
-                       weight_col='weight',
-                       save_memory=True,
-                       verbose=False
-                       ):
-        '''
-
-
+                 template=None,
+                 Ni=None, Nj=None, Nk=None,
+                 affine=None,
+                 mask=None,
+                 atlas=None,
+                 groupby_col=None,
+                 x_col='x',
+                 y_col='y',
+                 z_col='z',
+                 weight_col='weight',
+                 save_memory=True,
+                 verbose=None,
+                 dtype=np.float64
+                 ):
+        """
         Args:
             df (pandas.DataFrame): Pandas DataFrame containing the (x,y,z) coordinates, the weights and the map id. The names of the columns can be specified.
             template (nibabel.Nifti1Image): Template storing the box size and affine. If not None, Will overwrite parameters Ni, Nj, Nk and affine.
@@ -185,8 +254,9 @@ class Maps:
             x_col (str): Name of the column storing the x coordinates.
             y_col (str): Name of the column storing the y coordinates.
             z_col (str): Name of the column storing the z coordinates.
-            weight_col (str): Name of the column storing the weights. 
-        '''
+            weight_col (str): Name of the column storing the weights.
+
+        """
 
         if template is not None and (isinstance(template, nib.Nifti1Image) or isinstance(template, str)):
             template = nilearn.image.load_img(template)
@@ -194,7 +264,8 @@ class Maps:
             affine = template.affine
 
         elif template is not None:
-            raise ValueError('Template not understood. Must be a nibabel.Nifti1Image or a path to it.')
+            raise ValueError('Template not understood.'
+                             'Must be a nibabel.Nifti1Image or a path to it.')
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 3:
             Ni, Nj, Nk = df.shape
@@ -212,17 +283,19 @@ class Maps:
         self._mask = mask
         self._maps = None
         self._atlas = Atlas(atlas)
-        self._maps_dense =  None
+        self._maps_dense = None
         self._maps_atlas = None
         self._atlas_filter_matrix = None
-
+        self._dtype = dtype
+        self.verbose = verbose
 
         if isinstance(df, pd.DataFrame):
             if groupby_col is None:
-                raise ValueError('Must specify column name to group by maps.')
+                raise TypeError('Must specify column name to group by maps.')
 
             if Ni is None or Nj is None or Nk is None or affine is None:
-                raise ValueError('Must specify Ni, Nj, Nk and affine to initialize with dataframe.')
+                raise TypeError('Must specify Ni, Nj, Nk and affine to'
+                                'initialize with dataframe.')
 
             col_names = {
                 'groupby': groupby_col,
@@ -232,63 +305,69 @@ class Maps:
                 'weight': weight_col
             }
 
-            self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, verbose)
+            self._maps = build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask, self.verbose, self._dtype)
 
         elif isinstance(df, nib.Nifti1Image) or isinstance(df, str) or isinstance(df, list):
-            self._maps, Ni, Nj, Nk, affine = build_maps_from_img(df)
+            self._maps, Ni, Nj, Nk, affine = build_maps_from_img(df, dtype=self._dtype)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 2:
-            self._maps = scipy.sparse.csr_matrix(df)
+            self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 3:
-            self._maps = scipy.sparse.csr_matrix(self._flatten_array(df, _2D=1))
+            df = self._flatten_array(df, _2D=1)
+            self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, np.ndarray) and len(df.shape) == 4:
-            self._maps = scipy.sparse.csr_matrix(df.reshape((-1, df.shape[-1]), order='F'))
+            df = df.reshape((-1, df.shape[-1]), order='F')
+            self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, tuple):
-            self._maps = scipy.sparse.csr_matrix(df)
+            self._maps = scipy.sparse.csr_matrix(df, dtype=self._dtype)
 
         elif isinstance(df, int):
-            self._maps = scipy.sparse.csr_matrix((df, 1))
+            self._maps = scipy.sparse.csr_matrix((df, 1), dtype=self._dtype)
 
         elif df is None:
             self._maps = None
 
         elif not isinstance(df, Maps):
-            raise ValueError('First argument not understood : {}'.format(type(df)))
-
+            raise TypeError(f'First argument not understood : {type(df)}')
 
         if Ni is None or Nj is None or Nk is None:
-            raise ValueError('Must either specify Ni, Nj, Nk or template.')
+            raise TypeError('Must either specify Ni, Nj, Nk or template.')
 
         self._Ni = Ni
         self._Nj = Nj
         self._Nk = Nk
         self._affine = affine
 
-
         if self._mask_dimensions_missmatch():
-            raise ValueError('Mask dimensions missmatch. Given box size ({}, {}, {}) whereas mask size is {}. Consider resampling either input data or mask.'.format(self._Ni, self._Nj, self._Nk, self._mask.get_fdata().shape))
+            raise ValueError(f'Mask dimensions missmatch. Given box size is '
+                             f'({self.Ni}, {self.Nj}, {self.Nk}) whereas '
+                             f'mask size is {self._mask.get_fdata().shape}. '
+                             f'Consider resampling either input data or mask.')
 
         if self._atlas_dimensions_missmatch():
-            raise ValueError('Atlas dimensions missmatch. Given box size ({}, {}, {}) whereas atlas size is {}. Consider resampling either input data or atlas.'.format(self._Ni, self._Nj, self._Nk, self._atlas.data.shape))
+            raise ValueError(f'Atlas dimensions missmatch. Given box size is '
+                             f'({self.Ni}, {self.Nj}, {self.Nk}) whereas '
+                             f'atlas size is {self._atlas.data.shape}. '
+                             f'Consider resampling input data or atlas.')
 
         if self._box_dimensions_missmatch():
-            raise ValueError('Box dimension missmatch. Given box size is ({}, {}, {}) for {} voxels whereas maps contains {} voxels.'.format(self._Ni, self._Nj, self._Nk, self._Ni*self._Nj*self._Nk, self._maps.shape))
-
+            raise ValueError(f'Box dimension missmatch. Given box size is '
+                             f'({self.Ni}, {self.Nj}, {self.Nk}) for '
+                             f'{self.prod_N} voxels whereas maps '
+                             f'has shape {self._maps.shape}.')
 
         if self._has_mask():
             self.apply_mask(mask)
 
-        self._build_atlas_filter_matrix()
         self._refresh_atlas_maps()
 
         if not save_memory:
             self._set_dense_maps()
 
-
-    #_____________PROPERTIES_____________#
+    # _____________PROPERTIES_____________ #
     @property
     def save_memory(self):
         return self._save_memory
@@ -298,7 +377,8 @@ class Maps:
         self._save_memory = save_memory
 
         if save_memory:
-            if hasattr(self, '_maps_dense'): del self._maps_dense
+            if hasattr(self, '_maps_dense'):
+                del self._maps_dense
         else:
             self._set_dense_maps()
 
@@ -308,14 +388,17 @@ class Maps:
 
     @maps.setter
     def maps(self, maps):
-        self._maps = maps
+        if not scipy.sparse.issparse(maps) or maps.getformat() != 'csr':
+            maps = scipy.sparse.csr_matrix(maps)
+
+        self._maps = maps.astype(self._dtype)
         self._refresh_atlas_maps()
 
         if hasattr(self, '_save_memory') and not self._save_memory:
             self._set_dense_maps()
 
     def _set_maps(self, maps, refresh_atlas_maps=True, refresh_dense_maps=True):
-        self._maps = maps
+        self._maps = maps.astype(self._dtype)
 
         if refresh_atlas_maps:
             self._refresh_atlas_maps()
@@ -324,50 +407,166 @@ class Maps:
             self._set_dense_maps()
 
     @property
-    def n_voxels(self):
+    def n_voxels(self):  # Deprecated
         return 0 if self._maps is None else self._maps.shape[0]
 
     @property
-    def n_maps(self):
+    def n_v(self):
+        return 0 if self._maps is None else self._maps.shape[0]
+
+    @property
+    def n_maps(self):  # Deprecated
         return 0 if self._maps is None else self._maps.shape[1]
 
-    #_____________CLASS_METHODS_____________#
+    @property
+    def n_m(self):
+        return 0 if self._maps is None else self._maps.shape[1]
+
+    @property
+    def Ni(self):
+        return self._Ni
+
+    @property
+    def Nj(self):
+        return self._Nj
+
+    @property
+    def Nk(self):
+        return self._Nk
+
+    @property
+    def prod_N(self):
+        return self.Ni*self.Nj*self.Nk
+
+    @property
+    def affine(self):
+        return self._affine
+
+    @property
+    def shape(self):
+        return (self.Ni, self.Nj, self.Nk, self.n_m)
+
+    @property
+    def shape_f(self):
+        return (self.n_v, self.n_m)
+
+    def set_coord(self, id, x, y, z, val):
+        """Set value to a given x y z coord"""
+
+        if id < 0 or id >= self.n_m:
+            raise ValueError(f'Map id must be in [0, {self.n_m}].')
+
+        i, j, k = self.xyz_to_ijk(x, y, z)
+        p = self._coord_to_id(i, j, k)
+        self.maps[p, id] = val
+
+    def xyz_to_ijk(self, x, y, z):
+        if self.affine is None:
+            raise ValueError('Maps object should have affine to convert xyz coords.')
+
+        inv_affine = np.linalg.inv(self.affine)
+        return np.clip(np.floor(np.dot(inv_affine, [x, y, z, 1]))[:-1].astype(int), [0, 0, 0], [self.Ni-1, self.Nj-1, self.Nk-1])
+
+    # _____________CLASS_METHODS_____________ #
     @classmethod
-    def zeros(cls, n_voxels, n_maps=1, **kwargs):
-        '''
-            Create empty maps of the given shape.
-            See the Maps.__init__ doc for **kwargs parameters.
-        '''
-        return cls(df=(n_voxels, n_maps), **kwargs)
+    def empty(cls, **kwargs):
+        """
+        Create an empty Maps object.
+
+        See Maps.__init__ doc for valid kwargs.
+
+        Returns:
+            (Maps) Instance of Maps object.
+
+        """
+        return cls(df=None, **kwargs)
 
     @classmethod
-    def random(cls, n_peaks, n_maps, Ni=None, Nj=None, Nk=None, affine=None, template=None, mask=None, atlas=None, p=None):
-        '''
-            Create the given number of maps and sample peaks on them. 
+    def zeros(cls, n_maps=1, **kwargs):
+        """
+        Create zero-valued maps of the given shape.
 
-            See the Maps.__init__ doc for Ni, Nj, Nk, mask, atlas parameters.
-            See the Maps.randomize doc for n_peaks, n_maps, p parameters.
-        '''
-        maps = cls(df=None, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, template=template, mask=mask, atlas=atlas)
+        See the Maps.__init__ doc for **kwargs parameters.
 
-        return maps.randomize(n_peaks, n_maps, p=p, use_mask=(mask is not None), inplace=True)
+        Args:
+            n_maps (int, Optional): Number of maps.
+
+        Returns:
+            (Maps) Instance of Maps object.
+
+        """
+        maps = cls.empty(**kwargs)
+        maps.maps = csr_matrix((maps.prod_N, n_maps), dtype=maps._dtype)
+        return maps
+
+    @classmethod
+    def random(cls, size, p=None, random_state=None, **kwargs):
+        """
+        Create random maps from given size.
+
+        Must give appropriates kwargs to initialize an empty map.
+        See the Maps.__init__ doc.
+
+        Args:
+            size: See the Maps.randomize doc.
+            p: See the Maps.randomize doc.
+
+        Returns:
+            (Maps) Instance of Maps object.
+
+        """
+        maps = cls.empty(**kwargs)
+        return maps.randomize(
+            size,
+            p=p,
+            override_mask=False,
+            inplace=True,
+            random_state=random_state
+        )
 
     @classmethod
     def copy_header(cls, other):
-        '''
-            Create a Maps instance with same header as the passed Maps object.
+        """
+        Create a Maps instance with same header as given Maps object.
 
-            Args:
-                other (Maps): Maps instance wanted informations.
+        Args:
+            other (Maps): Maps instance wanted informations.
 
-            Returns:
-                (Maps)
-        '''
+        Returns:
+            (Maps) Instance of Maps object.
+
+        """
         maps = cls(Ni=other._Ni, Nj=other._Nj, Nk=other._Nk)
         maps._copy_header(other)
         return maps
 
-    #_____________PRIVATE_TOOLS_____________#
+    @classmethod
+    def concatenate(cls, seq):
+        """
+        Concatenate given sequence of Maps object.
+
+        For example if the first object contains 1 map and the
+        second 2 maps, the concatenated object contains the 3 stacked maps.
+
+        Args:
+            seq (sequence): Sequence of Maps object to concatenate.
+
+        Returns:
+            (Maps) Instance of Maps object
+
+        Raises:
+            ValueError: If shapes of maps missmatch or empty sequence.
+
+        """
+        if not seq:
+            raise ValueError('Empty sequence given.')
+
+        res = Maps.copy_header(seq[0])
+        res.maps = hstack([maps.maps for maps in seq])
+
+        return res
+
+    # _____________PRIVATE_TOOLS_____________ #
     def _copy_header(self, other):
         self._Ni = other._Ni
         self._Nj = other._Nj
@@ -380,17 +579,18 @@ class Maps:
         return self
 
     def __str__(self):
-        string = '\nMaps object containing {} maps.\n'
-        string += '____________Header_____________\n'
-        string += 'N Nonzero : {}\n'
-        string += 'N voxels : {}\n'
-        string += 'N pmids : {}\n'
-        string += 'Box size : ({}, {}, {})\n'
-        string += 'Affine :\n{}\n'
-        string += 'Has atlas : {}\n'
-        string += 'Map : \n{}\n'
-        string += 'Atlas Map : \n{}\n'
-        return string.format(self.n_maps, self.maps.count_nonzero(), self.n_voxels, self.n_maps, self._Ni, self._Nj, self._Nk, self._affine, self._has_atlas(), self.maps, self._maps_atlas)
+        return (
+            f'\nMaps object containing {self.n_m} maps.\n'
+            f'____________Header_____________\n'
+            f'N Nonzero : {self.maps.count_nonzero()}\n'
+            f'N voxels : {self.n_v}\n'
+            f'N maps : {self.n_m}\n'
+            f'Box size : ({self.Ni}, {self.Nj}, {self.Nk})\n'
+            f'Affine :\n{self.affine}\n'
+            f'Has atlas : {self._has_atlas()}\n'
+            f'Map : \n{self.maps}\n'
+            f'Atlas Map : \n{self._maps_atlas}\n'
+        )
 
     @staticmethod
     def coord_to_id(i, j, k, Ni, Nj, Nk):
@@ -399,7 +599,7 @@ class Maps:
     @staticmethod
     def id_to_coord(id, Ni, Nj, Nk):
         return np.unravel_index(id, (Ni, Nj, Nk), order='F')
-   
+
     @staticmethod
     def flatten_array(array, _2D=None):
         shape = -1 if _2D is None else (-1, _2D)
@@ -427,11 +627,11 @@ class Maps:
             return
 
         atlas_data = self._flatten_array(self._atlas.data)
-        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self._Ni*self._Nj*self._Nk))
+        filter_matrix = scipy.sparse.lil_matrix((self._atlas.n_labels, self.prod_N))
 
         for k in range(self._atlas.n_labels):
             row = atlas_data == k
-            filter_matrix[k, row] = 1
+            filter_matrix[k, row] = 1/np.sum(row)
 
         return scipy.sparse.csr_matrix(filter_matrix)
 
@@ -458,7 +658,7 @@ class Maps:
         if map_id is None:
             if atlas:
                 return self._maps_atlas
-            
+
             elif dense:
                 return self._maps_dense
 
@@ -468,13 +668,12 @@ class Maps:
         else:
             if atlas:
                 return self._maps_atlas[:, map_id]
-            
+
             elif dense:
                 return self._maps_dense[:, :, :, map_id]
 
             else:
                 return self._maps[:, map_id]
-
 
     def _set_dense_maps(self):
         if self._maps is None:
@@ -511,7 +710,15 @@ class Maps:
 
         return True
 
-    #_____________OPERATORS_____________#
+    def _should_verbose(self, verbose):
+        if verbose is None:
+            if self.verbose is None:
+                return False
+            return self.verbose
+
+        return verbose
+
+    # _____________OPERATORS_____________ #
 
     def __iadd__(self, val):
         self.maps += val.maps
@@ -531,10 +738,13 @@ class Maps:
         result *= val
         return result
 
+    def __rmul__(self, val):
+        return self.__mul__(val)
+
     def __getitem__(self, key):
         return self.maps[:, key]
 
-    #_____________DATA_TRANSFORMERS_____________#
+    # _____________DATA_TRANSFORMERS_____________ #
     @staticmethod
     def map_to_array(map, Ni, Nj, Nk):
         '''
@@ -542,10 +752,11 @@ class Maps:
 
             Indexing of map is supposed to have been made Fortran like (first index moving fastest).
         '''
-        n_voxels, n_maps = map.shape
+        n_v, n_maps = map.shape
 
-        if n_voxels != Ni*Nj*Nk:
-            raise ValueError('Map\'s length ({}) does not match given box ({}, {}, {}) of size {}.'.format(n_voxels, Ni, Nj, Nk, Ni*Nj*Nk))
+        if n_v != Ni*Nj*Nk:
+            raise ValueError(f'Map\'s length ({n_v}) does not match given box '
+                             f'({Ni}, {Nj}, {Nk}) of size {Ni*Nj*Nk}.')
 
         return Maps.unflatten_array(map.toarray(), Ni, Nj, Nk, _4D=n_maps)
 
@@ -574,9 +785,9 @@ class Maps:
             Convert one map into a 3D numpy.ndarray.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert (3D output). 
-                    If None, converts all the maps (4D output). Defaults to None. 
-        
+                map_id (int, optional): If int : id of the map to convert (3D output).
+                    If None, converts all the maps (4D output). Defaults to None.
+
             Returns:
                 (numpy.ndarray) 3D array containing the chosen map information.
         '''
@@ -587,23 +798,40 @@ class Maps:
 
         return self.map_to_array(maps, self._Ni, self._Nj, self._Nk)
 
-    def to_img(self, map_id=None):
+    def to_img(self, map_id=None, sequence=False, verbose=None):
         '''
             Convert one map into a nibabel.Nifti1Image.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert (3D output). 
-                    If None, converts all the maps (4D output). Defaults to None. 
-        
+                map_id (int, optional): If int : id of the map to convert (3D output).
+                    If None, converts all the maps (4D output). Defaults to None.
+
             Returns:
                 (nibabel.Nifti1Image) Nifti1Image containing the chosen map information.
         '''
         if self._affine is None:
             raise ValueError('Must specify affine to convert maps to img.')
 
+        verbose = self._should_verbose(verbose)
+
         maps = self._maps
         if map_id is not None:
             maps = self._maps[:, map_id]
+
+        if sequence:
+
+            n_jobs = multiprocessing.cpu_count()//2
+            splitted_range = np.array_split(range(maps.shape[1]), n_jobs)
+
+            def to_img_pool(maps_range):
+                res = []
+                n_tot = len(maps_range)
+                for i, k in enumerate(maps_range):
+                    print_percent(i, n_tot, string='Converting {1} out of {2}... {0:.2f}%', verbose=verbose, rate=0, prefix='Maps')
+                    res.append(self.map_to_img(maps[:, k], self._Ni, self._Nj, self._Nk, self._affine))
+                return res
+
+            return np.concatenate(Parallel(n_jobs=n_jobs, backend='threading')(delayed(to_img_pool)(sub_array) for sub_array in splitted_range))
 
         return self.map_to_img(maps, self._Ni, self._Nj, self._Nk, self._affine)
 
@@ -616,12 +844,12 @@ class Maps:
 
         return array
 
-    def to_array_atlas(self, map_id=None, ignore_bg=True):
+    def to_array_atlas(self, map_id=None, ignore_bg=True, bg_label=None):
         '''
             Convert one atlas map into a 3D numpy.array.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert (3D output). 
+                map_id (int, optional): If int : id of the map to convert (3D output).
                     If None, converts all the maps (4D output). Defaults to None.
                 ignore_bg (bool, optional): If True: ignore the first label of the atlas (background) which is set to 0 in the returned array.
 
@@ -634,12 +862,27 @@ class Maps:
         if not self._has_atlas():
             raise AttributeError('No atlas were given.')
 
-        start = 1 if ignore_bg else 0
-        label_range = range(start, self._atlas.n_labels)
+        # start = 1 if ignore_bg else 0
+        # label_range = range(start, self._atlas.n_labels)
+
+        # label_range = self._atlas.labels_range_without_bg if ignore_bg and self._atlas.has_background() else self._atlas.label_range
+
+        label_range = self._atlas.get_labels_range(ignore_bg=ignore_bg, bg_label=bg_label)
+        # label_range = list(range(self._atlas.n_labels))
+
+        # Delete background if any
+        # try:
+        #     background_index = self._atlas.labels.index(background_label)
+        #     del label_range[background_index]
+        # except ValueError: # no Background in labels
+        #     pass
+
+        if map_id is None and self.n_maps == 1:
+            map_id = 0
 
         if map_id is None:
             array = np.zeros((self._Ni, self._Nj, self._Nk, self.n_maps))
-            
+
             for k in range(self.n_maps):
                 array[:, :, :, k] = self._one_map_to_array_atlas(self._maps_atlas[:, k], self._Ni, self._Nj, self._Nk, self._atlas.data, label_range)
         else:
@@ -648,12 +891,12 @@ class Maps:
 
         return array
 
-    def to_img_atlas(self, map_id=None, ignore_bg=True):
+    def to_img_atlas(self, map_id=None, ignore_bg=False):
         '''
             Convert one atlas map into a nibabel.Nifti1Image.
 
             Args:
-                map_id (int, optional): If int : id of the map to convert (3D output). 
+                map_id (int, optional): If int : id of the map to convert (3D output).
                     If None, converts all the maps (4D output). Defaults to None.
                 ignore_bg (bool, optional): If True: ignore the first label of the atlas (background) which is set to 0 in the returned array.
 
@@ -671,7 +914,59 @@ class Maps:
 
         return self._atlas_filter_matrix.dot(data)
 
-    #_____________PUBLIC_TOOLS_____________#
+    def to_atlas(self, bg_label=None):
+        '''
+            Converts the maps into an atlas by creating a label for each different values.
+
+            Returns:
+                (nibabel.Nifti1Image) Nifti1Image containing the atlas
+                () Labels of the regions
+        '''
+
+        array = self.to_array()
+
+        # print(np.histogram(array))
+        # print(np.unique(array))
+        # uniques = np.unique(array)
+        # n_tot = len(uniques)
+        if len(array.shape) == 4:
+            array = np.concatenate((np.zeros(array.shape[:-1]+(1,)), array), axis=3)
+            array = np.argmax(array, axis=3)
+        # array_atlas = np.zeros(array.shape[:-1])
+
+        # # print(np.histogram(np.argmax(array, axis=3)))
+
+        # for k in range(self.n_maps):
+        #     print_percent(k, self.n_maps, string='Converting to atlas label {1} out of {2} : {0:.2f}%...', rate=0, verbose=verbose)
+        #     array_atlas[array[:, :, :, k] > 0] = k+1
+
+        if self.n_maps == 1:  # Atlas stored on one map
+            # n_labels = len(np.unique(self.to_array(0)))
+            n_labels = int(np.max(self.to_array(0)))+1
+
+        else:  # Atlas stored on several maps, one label on each
+            n_labels = self.n_maps
+
+        if bg_label is not None:
+            if not isinstance(bg_label, tuple) or not len(bg_label) == 2:
+                raise ValueError('Background label must be a length 2 tuple of shape (bg_label_id, bg_label_name).')
+
+            bg_label_id, bg_label_name = bg_label
+            if bg_label_id < 0 or bg_label_id >= n_labels:
+                raise ValueError('Given background index out of range. {0} labels detected.'.format(n_labels))
+
+            L1 = ['r{}'.format(k) for k in range(bg_label_id)]
+            L2 = [bg_label_name]
+            L3 = ['r{}'.format(k) for k in range(bg_label_id+1, n_labels)]
+
+            L = L1+L2+L3
+
+        else:
+            L = ['r{}'.format(k) for k in range(n_labels)]
+
+        return {'maps': nib.Nifti1Image(array, self._affine), 'labels': L}
+
+    # _____________PUBLIC_TOOLS_____________ #
     def apply_mask(self, mask):
         '''
             Set the contribution of every voxels outside the mask to zero.
@@ -683,38 +978,77 @@ class Maps:
             raise ValueError('Mask must be an instance of nibabel.Nifti1Image')
 
         if self.maps is not None:
-            mask_array = self._flatten_array(mask.get_fdata())
-            filter_matrix = scipy.sparse.diags(mask_array, format='csr')
+            mask_array = self._flatten_array(mask.get_fdata()).astype(self._dtype)
+            filter_matrix = scipy.sparse.diags(mask_array, format='csr').astype(self._dtype)
             self.maps = filter_matrix.dot(self.maps)
 
         self._mask = mask
 
-    def randomize(self, n_peaks, n_maps, p=None, override_mask=False, inplace=False):
-        '''
-            Randomize the maps by sampling n_peaks of weight 1 (may overlap) over n_maps maps.
+    def apply_atlas(self, atlas, inplace=False):
+        new_maps = self if inplace else copy.copy(self)
+        new_maps._atlas = Atlas(atlas)
+        new_maps._atlas_filter_matrix = new_maps._build_atlas_filter_matrix()
+        new_maps._refresh_atlas_maps()
 
-            Args:
-                n_peaks (int): Number of peaks to sample maps-wise. Each peak has a weight 1 and the weights of the peaks sampled on the same voxel of the same map are added.
-                n_maps (int): Number of maps on which to perform the sample.
-                p (Maps instance or np.ndarray): (Optional) Distribution of probability of the peaks over the voxels.
-                    The distribution may be given either by a Maps instance containing 1 map or a np.ndarray of same shape as the box of the current Maps instance (Ni, Nj, Nk).
-                    If None, sample uniformly accros the box. Default: None
-                override_mask (bool): (Optional) If False, use the mask given when initializing the Maps object.
-                    Important : the given distribution p is then shrinked and re-normalized.
-                    If True p is unchanged. Default : False.
-                inplace (bool): (Optional) Performs the sampling inplace (True) or creates a new instance (False). Default False.
+        return new_maps
 
-            Returns:
-                (Maps instance) Self or a copy depending on inplace.
-        '''
+    def randomize(self,
+                  size,
+                  p=None,
+                  override_mask=False,
+                  inplace=False,
+                  random_state=None
+                  ):
+        """
+        Randomize maps from based on given size.
+
+        Args:
+            size: int or size 2 tuple or 1D numpy.ndarray.
+                If 1D numpy.ndarray, creates as many maps as the array length
+                and sample the given number of peaks in each maps.
+                Each peak has a weight 1 and the weights of the peaks sampled
+                on the same voxel of the same map are added.
+                If tuple (n_peaks, n_maps) given, creates n_maps, samples
+                n_peaks and assign each peak to a map uniformly.
+                If int given, equivalent as tuple with n_maps=1.
+            p (Maps instance or np.ndarray): (Optional) Distribution of probability of the peaks over the voxels.
+                The distribution may be given either by a Maps instance containing 1 map or a np.ndarray of same shape as the box of the current Maps instance (Ni, Nj, Nk).
+                If None, sample uniformly accros the box. Default: None
+            override_mask (bool): (Optional) If False, use the mask given when initializing the Maps object.
+                Important : the given distribution p is then shrinked and re-normalized.
+                If True, no mask is used and p is unchanged. Default : False.
+            inplace (bool): (Optional) Performs the sampling inplace (True) or creates a new instance (False). Default False.
+
+        Returns:
+            (Maps instance) Self or a copy depending on inplace.
+
+        """
+        np.random.seed(random_state)
+
         if self._Ni is None or self._Nj is None or self._Nk is None:
-            raise ValueError('Invalid box size ({}, {}, {}).'.format(Ni, Nj, Nk))
+            raise ValueError('Invalid box size ({}, {}, {}).'.format(self._Ni, self._Nj, self._Nk))
+
+        if isinstance(size, int):
+            n_peaks, n_maps = size, 1
+
+        elif isinstance(size, tuple):
+            if len(size) != 2:
+                raise ValueError('If given size is a tuple, must be of size 2 : (n_peaks, n_maps).')
+            n_peaks, n_maps = size
+
+        elif isinstance(size, np.ndarray):
+            if len(size.shape) != 1:
+                raise ValueError('Given size array not understood. Must be a 1D numpy array.')
+            n_peaks, n_maps = np.sum(size), size.shape[0]
+
+        else:
+            raise ValueError('Given size not understood.')
 
         n_voxels = self._Ni*self._Nj*self._Nk
 
         if p is None:
             p = np.ones(n_voxels)/n_voxels
-        
+
         elif isinstance(p, Maps):
             if p.n_maps != 1:
                 raise ValueError('Maps object should contain exactly one map to serve as distribution. Given has {} maps.'.format(p.n_maps))
@@ -735,14 +1069,17 @@ class Maps:
 
         maps = scipy.sparse.dok_matrix((n_voxels, n_maps))
         voxels_samples = np.random.choice(n_voxels, size=n_peaks, p=p)
-        voxels_samples_unique, counts = np.unique(voxels_samples, return_counts=True)
 
-        for i in range(len(voxels_samples_unique)):
-            map_id = np.random.randint(n_maps)
-            maps[voxels_samples_unique[i], map_id] = counts[i]
+        if isinstance(size, np.ndarray):
+            maps_samples = np.repeat(np.arange(n_maps), repeats=size)
+        else:
+            maps_samples = np.random.choice(n_maps, size=n_peaks)
+
+        for i in range(n_peaks):
+            map_id = maps_samples[i]
+            maps[voxels_samples[i], map_id] += 1
 
         maps = scipy.sparse.csr_matrix(maps)
-
 
         new_maps = self if inplace else copy.copy(self)
         new_maps.maps = maps
@@ -770,6 +1107,23 @@ class Maps:
 
         return new_maps
 
+    def threshold(self, threshold, inplace=False):
+        '''
+            Threshold each map according to the given threshold.
+
+            Args:
+                threshold: All value greater or equal to threshold remains
+                    unchanged, all the others are set to zero.
+                inplace (bool, optional): If True performs the normalization
+                    inplace else create a new instance.
+
+            Returns:
+                (Maps) Self or a copy depending on inplace.
+        '''
+        new_maps = self if inplace else copy.copy(self)
+        new_maps.maps[new_maps.maps < threshold] = 0.
+        return new_maps
+
     @staticmethod
     def _smooth_array(array, sigma):
         return gaussian_filter(array, sigma=sigma)
@@ -792,7 +1146,7 @@ class Maps:
         elif scipy.sparse.issparse(data):
             return Maps._smooth_map(data, sigma, Ni, Nj, Nk)
 
-    def smooth(self, sigma, map_id=None, inplace=False, verbose=False):
+    def smooth(self, sigma, map_id=None, inplace=False, verbose=None):
         '''
             Convolve chosen maps with gaussian kernel.
 
@@ -803,25 +1157,37 @@ class Maps:
                 verbose (bool, optional): If True print logs.
 
         '''
+        verbose = self._should_verbose(verbose)
+
         if map_id is None:
             map_ids = range(self.n_maps)
         else:
             map_ids = [map_id]
 
-        csc_matrices = []
+        def smooth_pool(map_ids, self, sigma):
 
-        for k in map_ids:
-            print_percent(k, self.n_maps, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
+            csc_matrices = []
+            n_tot = len(map_ids)
+            count = 0
+            for k in map_ids:
+                print_percent(count, n_tot, 'Smoothing {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose, prefix='Maps')
+                count += 1
 
-            if not self.save_memory:
-                array = self._get_maps(map_id=k, dense=True)
-            else:
-                array = self.to_array(k)
+                if not self.save_memory:
+                    array = self._get_maps(map_id=k, dense=True)
+                else:
+                    array = self.to_array(k)
 
-            array_smoothed = gaussian_filter(array, sigma=sigma)
-            array_smoothed = self._flatten_array(array_smoothed, _2D=1)
-            matrix = scipy.sparse.csc_matrix(array_smoothed)
-            csc_matrices.append(matrix)
+                array_smoothed = gaussian_filter(array, sigma=sigma)
+                array_smoothed = self._flatten_array(array_smoothed, _2D=1)
+                matrix = scipy.sparse.csc_matrix(array_smoothed)
+                csc_matrices.append(matrix)
+
+            return csc_matrices
+
+        nb_jobs = multiprocessing.cpu_count()//2
+        splitted_range = np.array_split(map_ids, nb_jobs)
+        csc_matrices = np.concatenate(Parallel(n_jobs=nb_jobs, backend='threading')(delayed(smooth_pool)(sub_array, self, sigma) for sub_array in splitted_range))
 
         csr_maps = scipy.sparse.hstack(csc_matrices)
         csr_maps = scipy.sparse.csr_matrix(csr_maps)
@@ -831,7 +1197,67 @@ class Maps:
 
         return new_maps
 
-    #_____________STATISTICS_____________#
+    def split(self, prop=0.5, random_state=None):
+        """
+        Split maps randomly  based on the given proportion.
+
+        Args:
+            prop(float): proportion of maps to assign in first set.
+            random_state(int): seed to initialise numpy.random.seed.
+
+        Returns:
+            (tuple): Size 2 tuple of Maps object. The first contains
+                approximatively the given proportion of the total maps.
+
+        """
+        np.random.seed(random_state)
+
+        maps_A = Maps.copy_header(self)
+        maps_B = Maps.copy_header(self)
+
+        n_A = np.ceil(prop*self.n_maps).astype(int)  # Nb elements in subset A
+        omega = np.arange(self.n_maps)
+        id_sub_maps_A = np.sort(np.random.choice(omega, n_A, replace=False))
+        id_sub_maps_B = np.sort(np.delete(omega, id_sub_maps_A))
+
+        def filter_matrix(array):
+            M = scipy.sparse.lil_matrix((self.n_maps, array.shape[0]))
+            for k in range(array.shape[0]):
+                M[array[k], k] = 1
+            return scipy.sparse.csr_matrix(M)
+
+        filter_matrix_A = filter_matrix(id_sub_maps_A)
+        filter_matrix_B = filter_matrix(id_sub_maps_B)
+
+        maps_A.maps = self.maps.dot(filter_matrix_A)
+        maps_B.maps = self.maps.dot(filter_matrix_B)
+
+        return maps_A, maps_B
+
+    def shuffle(self, random_state=None, inplace=False):
+        """Shuffle the maps index.
+
+        Shuffle the maps index. For example, if 3 maps are stored in this
+        order (1, 2, 3), shuffling them may lead to a new order (2, 1, 3).
+
+        Arguments:
+            random_state {int} -- Used to initialize the numpy random seed.
+        """
+        np.random.seed(random_state)
+
+        new_maps = self if inplace else copy.copy(self)
+        permutation = np.random.permutation(new_maps.n_m)
+        M = scipy.sparse.lil_matrix((new_maps.n_m, new_maps.n_m))
+
+        for k in range(new_maps.n_m):
+            M[k, permutation[k]] = 1.
+        M = scipy.sparse.csr_matrix(M)
+
+        new_maps.maps = new_maps.maps.dot(M)
+
+        return new_maps
+
+    # _____________STATISTICS_____________ #
     def n_peaks(self, atlas=False):
         '''
             Compute the sum of weights in each maps (equivalent to number of peaks if unit weights are 1).
@@ -912,7 +1338,6 @@ class Maps:
 
         return maps.dot(e)
 
-
     @staticmethod
     def _variance(maps, bias=False):
         '''
@@ -923,7 +1348,7 @@ class Maps:
         _, n_maps = maps.shape
 
         avg_map = Maps._average(maps)
-        maps_squared = maps.multiply(maps) # Squared element wise
+        maps_squared = maps.multiply(maps)  # Squared element wise
 
         avg_squared_map = Maps._average(maps_squared)
         squared_avg_map = avg_map.multiply(avg_map)
@@ -966,7 +1391,7 @@ class Maps:
 
         return var_map
 
-    def cov(self, atlas=True, bias=False, shrink=None, sparse=False, ignore_bg=True):
+    def cov(self, atlas=True, bias=False, shrink=None, sparse=False, ignore_bg=True, verbose=None):
         '''
             Computes the empirical covariance matrix of the voxels, the observations being the different maps.
             Important : Considering covariance between atlas' labels (atlas=True) instead of voxels is highly recommended
@@ -988,30 +1413,36 @@ class Maps:
         if not bias and self.n_maps <= 1:
             raise ValueError('Unbiased covariance computation requires at least 2 maps ({} given).'.format(self.n_maps))
 
+        verbose = self._should_verbose(verbose)
+
         maps = self._get_maps(atlas=atlas)
         ddof = 0 if bias else 1
 
         if atlas:
-            labels = self._atlas.labels
-            if ignore_bg:
-                maps[0, :] = 0
-                labels = labels[1:]
+            labels = self._atlas.get_labels(ignore_bg=ignore_bg)
+            if ignore_bg and self._atlas.has_background():
+                maps[self._atlas.bg_index, :] = 0
 
-
-        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose()
-        e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose()
+        if verbose:
+            print('Computing cov matrix')
+        e1 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps-ddof)).transpose().astype(self._dtype)
+        e2 = scipy.sparse.csr_matrix(np.ones(self.n_maps)/(self.n_maps)).transpose().astype(self._dtype)
 
         M1 = maps.dot(e1)
         M2 = maps.dot(e2)
         M3 = maps.dot(maps.transpose())/((self.n_maps-ddof))
 
         # Empirical covariance matrix
-        S =  M3 - M1.dot(M2.transpose())
+        S = M3 - M1.dot(M2.transpose())
 
+        del M1, M2, M3
+
+        print('To dense...') if verbose else None
         if not sparse:
             S = S.toarray()
 
         if shrink == 'LW':
+            print('Shrink') if verbose else None
             S = LedoitWolf().fit(S.toarray()).covariance_
 
         return S, labels if atlas else S
@@ -1043,11 +1474,12 @@ class Maps:
         else:
             return (k-2)/(k-1)*previous_var + 1./((k-1)**2)*Maps._power(new_avg - new_value, 2) + 1./(k-1)*Maps._power(new_value - new_avg, 2)
 
-    def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
+    def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=None):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
             (Less memory usage).
         '''
+        verbose = self._should_verbose(verbose)
 
         if not compute_var:
             return self.avg().smooth(sigma=sigma), None
@@ -1058,7 +1490,7 @@ class Maps:
         var_map_atlas = None
 
         for k in range(self.n_maps):
-            print_percent(k, self.n_maps, 'Iterative smooth avg var {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose)
+            print_percent(k, self.n_maps, 'Iterative smooth avg var {1} out of {2}... {0:.1f}%', rate=0, verbose=verbose, prefix='Maps')
 
             current_map = self._get_maps(map_id=k, atlas=False, dense=not self.save_memory)
             current_map = self._smooth(current_map, sigma, self._Ni, self._Nj, self._Nk)
@@ -1074,9 +1506,10 @@ class Maps:
         avg = Maps.copy_header(self)
         var = Maps.copy_header(self)
 
-        if not self.save_memory: avg_map = self.array_to_map(avg_map)
-        if not self.save_memory: var_map = self.array_to_map(var_map)
-        
+        if not self.save_memory:
+            avg_map = self.array_to_map(avg_map)
+            var_map = self.array_to_map(var_map)
+
         avg._set_maps(avg_map, refresh_atlas_maps=False)
         var._set_maps(var_map, refresh_atlas_maps=False)
 
@@ -1085,4 +1518,3 @@ class Maps:
             var._maps_atlas = var_map_atlas
 
         return avg, var
-

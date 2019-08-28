@@ -1,3 +1,4 @@
+"""Some global variables used in other files."""
 from joblib import Memory
 from nilearn import datasets, masking
 import numpy as np
