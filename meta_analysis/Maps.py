@@ -63,7 +63,7 @@ def compute_maps(df, **kwargs):
 
 
 @mem.cache
-def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=False, dtype=np.float32):
+def build_maps_from_df(df, col_names, Ni, Nj, Nk, affine, mask=None, verbose=None, dtype=np.float32):
     '''
         Given a keyword, finds every related studies and builds their activation maps.
 
@@ -237,7 +237,7 @@ class Maps:
                  z_col='z',
                  weight_col='weight',
                  save_memory=True,
-                 verbose=False,
+                 verbose=None,
                  dtype=np.float64
                  ):
         """
@@ -798,7 +798,7 @@ class Maps:
 
         return self.map_to_array(maps, self._Ni, self._Nj, self._Nk)
 
-    def to_img(self, map_id=None, sequence=False, verbose=False):
+    def to_img(self, map_id=None, sequence=False, verbose=None):
         '''
             Convert one map into a nibabel.Nifti1Image.
 
@@ -1146,7 +1146,7 @@ class Maps:
         elif scipy.sparse.issparse(data):
             return Maps._smooth_map(data, sigma, Ni, Nj, Nk)
 
-    def smooth(self, sigma, map_id=None, inplace=False, verbose=False):
+    def smooth(self, sigma, map_id=None, inplace=False, verbose=None):
         '''
             Convolve chosen maps with gaussian kernel.
 
@@ -1391,7 +1391,7 @@ class Maps:
 
         return var_map
 
-    def cov(self, atlas=True, bias=False, shrink=None, sparse=False, ignore_bg=True, verbose=False):
+    def cov(self, atlas=True, bias=False, shrink=None, sparse=False, ignore_bg=True, verbose=None):
         '''
             Computes the empirical covariance matrix of the voxels, the observations being the different maps.
             Important : Considering covariance between atlas' labels (atlas=True) instead of voxels is highly recommended
@@ -1474,7 +1474,7 @@ class Maps:
         else:
             return (k-2)/(k-1)*previous_var + 1./((k-1)**2)*Maps._power(new_avg - new_value, 2) + 1./(k-1)*Maps._power(new_value - new_avg, 2)
 
-    def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=False):
+    def iterative_smooth_avg_var(self, compute_var=True, sigma=None, bias=False, verbose=None):
         '''
             Compute average and variance of the maps in self.maps (previously smoothed if sigma!=None) iteratively.
             (Less memory usage).
