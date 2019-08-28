@@ -30,11 +30,11 @@ jobs:
       - run:
           name: install dependencies
           command: |
-            pip install '.[test]' --user
-            # echo $HOME
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
+            pip install coverage --user
+            echo $HOME
 
       - save_cache:
           paths:
@@ -49,7 +49,7 @@ jobs:
       - run:
           name: run tests
           command: |
-            # . venv/bin/activate
+            . venv/bin/activate
             $HOME/.local/bin/coverage run -m pytest --mpl
             $HOME/.local/bin/coverage report
             $HOME/.local/bin/coverage html
