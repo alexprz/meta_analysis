@@ -1,11 +1,18 @@
+import os
 import numpy as np
 from matplotlib import pyplot as plt
 import seaborn as sns
 from nilearn import plotting
-
 import matplotlib
-matplotlib.use('MacOsx')
-from matplotlib import pyplot as plt
+from dotenv import load_dotenv
+
+load_dotenv()
+
+if 'MPL_BACKEND' in os.environ:
+    matplotlib.use(os.environ['MPL_BACKEND'])
+else:
+    matplotlib.use('TkAgg')
+
 
 def plot_activity_map(stat_img, threshold=0., glass_brain=False, title=None):
     '''
@@ -21,21 +28,23 @@ def plot_activity_map(stat_img, threshold=0., glass_brain=False, title=None):
 
     return display
 
+
 def plot_matrix_heatmap(M):
     sns.heatmap(M)
     plt.show()
 
+
 def plot_cov_matrix_brain(M, Ni, Nj, Nk, affine, threshold=None):
-    
+
     n_voxels, _ = M.shape
     coords = np.zeros((Ni, Nj, Nk, 3)).astype(int)
 
     for k in range(Ni):
-         coords[k, :, :, 0] = k
+        coords[k, :, :, 0] = k
     for k in range(Nj):
-         coords[:, k, :, 1] = k
+        coords[:, k, :, 1] = k
     for k in range(Nk):
-         coords[:, :, k, 2] = k
+        coords[:, :, k, 2] = k
 
     coords = coords.reshape((-1, 3), order='F')
     coords_world = np.zeros(coords.shape)

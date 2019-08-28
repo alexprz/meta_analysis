@@ -111,54 +111,54 @@ def test_iterative_avg_var_thresholded_2_dense_biased():
 @pytest.mark.mpl_image_compare
 def test_atlas_sum():
     sum = maps_atlas.summed_map()
-    return plotting.plot_activity_map(sum.to_img_atlas())
+    return plotting.plot_activity_map(sum.to_img_atlas(ignore_bg=True))
 
 @pytest.mark.mpl_image_compare
 def test_atlas_avg():
     avg = maps_atlas.avg()
-    return plotting.plot_activity_map(avg.to_img_atlas())
+    return plotting.plot_activity_map(avg.to_img_atlas(ignore_bg=True))
 
 @pytest.mark.mpl_image_compare
 def test_atlas_var():
     var = maps_atlas.var()
-    return plotting.plot_activity_map(var.to_img_atlas())
+    return plotting.plot_activity_map(var.to_img_atlas(ignore_bg=True))
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg():
     avg, _ = maps_atlas.iterative_smooth_avg_var(compute_var=False, sigma=sigma, bias=False)
-    return plotting.plot_activity_map(avg.to_img_atlas())
+    return plotting.plot_activity_map(avg.to_img_atlas(ignore_bg=True))
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg_var_1():
-    return plotting.plot_activity_map(avg_atlas.to_img_atlas())
+    return plotting.plot_activity_map(avg_atlas.to_img_atlas(ignore_bg=True))
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg_var_2():
-    return plotting.plot_activity_map(var_atlas.to_img_atlas())
+    return plotting.plot_activity_map(var_atlas.to_img_atlas(ignore_bg=True))
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg_var_thresholded_1():
-    return plotting.plot_activity_map(avg_atlas.to_img_atlas(), threshold=0.0007)
+    return plotting.plot_activity_map(avg_atlas.to_img_atlas(ignore_bg=True), threshold=0.0007)
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg_var_thresholded_2():
-    return plotting.plot_activity_map(var_atlas.to_img_atlas(), threshold=0.00002)
+    return plotting.plot_activity_map(var_atlas.to_img_atlas(ignore_bg=True), threshold=0.00002)
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg_var_1_biased():
-    return plotting.plot_activity_map(avg_atlas_biased.to_img_atlas())
+    return plotting.plot_activity_map(avg_atlas_biased.to_img_atlas(ignore_bg=True))
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg_var_2_biased():
-    return plotting.plot_activity_map(var_atlas_biased.to_img_atlas())
+    return plotting.plot_activity_map(var_atlas_biased.to_img_atlas(ignore_bg=True))
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg_var_thresholded_1_biased():
-    return plotting.plot_activity_map(avg_atlas_biased.to_img_atlas(), threshold=0.0007)
+    return plotting.plot_activity_map(avg_atlas_biased.to_img_atlas(ignore_bg=True), threshold=0.0007)
 
 @pytest.mark.mpl_image_compare
 def test_atlas_iterative_avg_var_thresholded_2_biased():
-    return plotting.plot_activity_map(var_atlas_biased.to_img_atlas(), threshold=0.00002)
+    return plotting.plot_activity_map(var_atlas_biased.to_img_atlas(ignore_bg=True), threshold=0.00002)
 
 @pytest.mark.mpl_image_compare
 def test_atlas_cov():

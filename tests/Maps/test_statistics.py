@@ -185,7 +185,7 @@ class IterativeVsManual(unittest.TestCase):
         _, var = maps2.iterative_smooth_avg_var(sigma=sigma, bias=True)
         maps2.smooth(sigma=sigma, inplace=True)
 
-        self.assertTrue(np.array_equal(maps2.var(bias=True).to_array(), var.to_array()))
+        self.assertTrue(np.allclose(maps2.var(bias=True).to_array(), var.to_array()))
 
     def test_var_two_maps_unbiased(self):
         maps2 = Maps(self.array2, Ni=self.Ni, Nj=self.Nj, Nk=self.Nk)
@@ -194,4 +194,4 @@ class IterativeVsManual(unittest.TestCase):
         _, var = maps2.iterative_smooth_avg_var(sigma=sigma, bias=False)
         maps2.smooth(sigma=sigma, inplace=True)
 
-        self.assertTrue(np.array_equal(maps2.var(bias=False).to_array(), var.to_array()))
+        self.assertTrue(np.allclose(maps2.var(bias=False).to_array(), var.to_array()))

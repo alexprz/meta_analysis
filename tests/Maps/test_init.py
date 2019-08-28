@@ -5,80 +5,80 @@ import numpy as np
 import scipy
 
 from meta_analysis import Maps
-from globals_test import gray_mask, template, atlas, df, Ni, Nj, Nk, \
+from globals_test import gray_mask, template, atlas, df_ex, Ni, Nj, Nk, \
  groupby_col, affine, array2D, array3D, array4D_1, array4D_2, \
  example_maps, array2D_missmatch, array3D_missmatch, array4D_1_missmatch, \
  array4D_2_missmatch, gray_mask_missmatch, fmri_img, gray_mask_2, atlas_2
 
 class DataFrameInitTestCase(unittest.TestCase):
     def test_allowed_template(self):
-        maps = Maps(df, template=template, groupby_col=groupby_col)
+        maps = Maps(df_ex, template=template, groupby_col=groupby_col)
         self.assertEqual(maps.n_maps, 2)
         self.assertFalse(maps._has_mask())
         self.assertFalse(maps._has_atlas())
 
     def test_allowed_template_mask(self):
-        maps = Maps(df, template=template, groupby_col=groupby_col, mask=gray_mask)
+        maps = Maps(df_ex, template=template, groupby_col=groupby_col, mask=gray_mask)
         self.assertTrue(maps._has_mask())
 
     def test_allowed_template_atlas(self):
-        maps = Maps(df, template=template, groupby_col=groupby_col, atlas=atlas)
+        maps = Maps(df_ex, template=template, groupby_col=groupby_col, atlas=atlas)
         self.assertTrue(maps._has_atlas())
 
     def test_allowed_template_mask_atlas(self):
-        maps = Maps(df, template=template, groupby_col=groupby_col, mask=gray_mask, atlas=atlas)
+        maps = Maps(df_ex, template=template, groupby_col=groupby_col, mask=gray_mask, atlas=atlas)
         self.assertTrue(maps._has_mask())
         self.assertTrue(maps._has_atlas())
 
     def test_allowed_manual(self):
-        maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col)
+        maps = Maps(df_ex, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col)
         self.assertEqual(maps.n_maps, 2)
         self.assertFalse(maps._has_mask())
         self.assertFalse(maps._has_atlas())
 
     def test_allowed_manual_mask(self):
-        maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, mask=gray_mask)
+        maps = Maps(df_ex, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, mask=gray_mask)
         self.assertTrue(maps._has_mask())
 
     def test_allowed_manual_atlas(self):
-        maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, atlas=atlas)
+        maps = Maps(df_ex, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, atlas=atlas)
         self.assertTrue(maps._has_atlas())
 
     def test_allowed_manual_mask_atlas(self):
-        maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, mask=gray_mask, atlas=atlas)
+        maps = Maps(df_ex, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, mask=gray_mask, atlas=atlas)
         self.assertTrue(maps._has_mask())
         self.assertTrue(maps._has_atlas())
 
     def test_forbidden(self):
-        with self.assertRaises(ValueError):
-            maps = Maps(df)
+        with self.assertRaises(TypeError):
+            maps = Maps(df_ex)
 
-        with self.assertRaises(ValueError):
-            maps = Maps(df, groupby_col=groupby_col)
+        with self.assertRaises(TypeError):
+            maps = Maps(df_ex, groupby_col=groupby_col)
 
-        with self.assertRaises(ValueError):
-            maps = Maps(df, Ni=Ni, Nj=Nj, affine=affine, groupby_col=groupby_col)
+        with self.assertRaises(TypeError):
+            maps = Maps(df_ex, Ni=Ni, Nj=Nj, affine=affine, groupby_col=groupby_col)
 
-        with self.assertRaises(ValueError):
-            maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, groupby_col=groupby_col)
+        with self.assertRaises(TypeError):
+            maps = Maps(df_ex, Ni=Ni, Nj=Nj, Nk=Nk, groupby_col=groupby_col)
 
-        with self.assertRaises(ValueError):
-            maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine)
+        with self.assertRaises(TypeError):
+            maps = Maps(df_ex, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine)
 
-        with self.assertRaises(ValueError):
-            maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk)
+        with self.assertRaises(TypeError):
+            maps = Maps(df_ex, Ni=Ni, Nj=Nj, Nk=Nk)
 
-        with self.assertRaises(ValueError):
-            maps = Maps(df, template=template)
+        with self.assertRaises(TypeError):
+            maps = Maps(df_ex, template=template)
 
     def test_mask_missmatch_manual(self):
         with self.assertRaises(ValueError):
-            maps = Maps(df, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, mask=gray_mask_missmatch)
-            maps = Maps(df, Ni=Ni-1, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, mask=gray_mask)
-    
+            maps = Maps(df_ex, Ni=Ni, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, mask=gray_mask_missmatch)
+            maps = Maps(df_ex, Ni=Ni-1, Nj=Nj, Nk=Nk, affine=affine, groupby_col=groupby_col, mask=gray_mask)
+
     def test_atlas_missmatch_manual(self):
         with self.assertRaises(ValueError):
-            maps = Maps(df, template, groupby_col=groupby_col, mask=gray_mask_missmatch)
+            maps = Maps(df_ex, template, groupby_col=groupby_col, mask=gray_mask_missmatch)
 
 class ArrayInitTestCase(unittest.TestCase):
     def test_allowed_2D_template(self):
@@ -119,13 +119,13 @@ class ArrayInitTestCase(unittest.TestCase):
         self.assertEqual(array4D_2.shape[:-1], (maps._Ni, maps._Nj, maps._Nk))
 
     def test_forbidden(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps(array2D)
 
     def test_forbidden_manual(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps(array2D, Ni=Ni, Nj=Nj, affine=affine)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps(array2D, Ni=Ni, Nj=Nj)
 
     @given(di=strats.integers(min_value=-Ni+1, max_value=Ni-1),
@@ -134,14 +134,14 @@ class ArrayInitTestCase(unittest.TestCase):
     @settings(max_examples=2)
     def test_box_missmatch_manual(self, di, dj, dk):
         if (di, dj, dk) == (0, 0, 0):
-            return 
+            return
         with self.assertRaises(ValueError):
             maps = Maps(array2D, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
-        # with self.assertRaises(ValueError):
+        # with self.assertRaises(TypeError):
         #     maps = Maps(array3D, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
-        # with self.assertRaises(ValueError):
+        # with self.assertRaises(TypeError):
         #     maps = Maps(array4D_1, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
-        # with self.assertRaises(ValueError):
+        # with self.assertRaises(TypeError):
         #     maps = Maps(array4D_2, Ni=Ni+di, Nj=Nj+dj, Nk=Nk+dk, affine=affine)
 
     def test_box_missmatch_template(self):
@@ -197,15 +197,15 @@ class ShapeInitTestCase(unittest.TestCase):
         maps = Maps(self.shape2D, Ni=Ni, Nj=Nj, Nk=Nk)
 
     def test_forbidden(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps(self.shape1D)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps(self.shape2D)
 
     def test_forbidden_manual(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps(self.shape1D, Ni=Ni, Nj=Nj, affine=affine)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps(self.shape2D, Ni=Ni, Nj=Nj, affine=affine)
 
     def test_box_missmatch_manual(self):
@@ -244,10 +244,10 @@ class NoneInitTestCase(unittest.TestCase):
         maps = Maps(Ni=Ni, Nj=Nj, Nk=Nk)
 
     def test_forbidden(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps()
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             maps = Maps(Ni=Ni, Nj=Nj, affine=affine)
 
 class ImgInitTestCase(unittest.TestCase):
