@@ -6,9 +6,9 @@ save
 doc/*/
 *.lprof
 *.prof
-baseline
 .coverage*
 *_cache*
 *cache_*
 .env
 .*
+!.circleci
