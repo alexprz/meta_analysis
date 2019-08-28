@@ -11,3 +11,4 @@ baseline
 *_cache*
 *cache_*
 .env
+.*
