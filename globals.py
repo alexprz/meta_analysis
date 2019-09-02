@@ -4,10 +4,11 @@ from nilearn import datasets, masking
 import numpy as np
 import pandas as pd
 import scipy
+import os
 
-pickle_path = 'save/'
-input_path = 'minimal/'
-cache_dir = 'cache_joblib'
+pickle_path = os.path.abspath('save/')+'/'
+input_path = os.path.abspath('minimal/')+'/'
+cache_dir = os.path.abspath('cache_joblib')+'/'
 mem = Memory(cache_dir)
 
 # Loading MNI152 background and parameters (shape, affine...)
