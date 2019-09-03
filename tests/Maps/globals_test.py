@@ -1,3 +1,4 @@
+"""Some globals var to run the tests."""
 import hypothesis.strategies as strats
 from nilearn import datasets, masking
 import pandas as pd
@@ -7,14 +8,14 @@ import nibabel as nib
 from nistats.datasets import fetch_spm_auditory
 import nilearn
 import copy
+import pickle
+import os
 
 from meta_analysis import Maps
-from tools import build_df_from_keyword
 
 max_box_width = 10
 max_maps = 5
 max_peaks = 100
-
 
 template = datasets.load_mni152_template()
 gray_mask = masking.compute_gray_matter_mask(template)
@@ -45,11 +46,13 @@ array4D_2_missmatch = np.random.rand(Ni, Nj-1, Nk, 2)
 
 example_maps = Maps(df_ex, template=template, groupby_col=groupby_col)
 
-keyword = 'prosopagnosia'
-sigma = 2.
-df = build_df_from_keyword(keyword)
+# Loading prosopagnosia data
+dirname = os.path.dirname(__file__)
+data_path = os.path.join(dirname, 'data/df_prosopagnosia.pickle')
+with open(data_path, 'rb') as file:
+    df = pickle.load(file)
+
 maps = Maps(df, template=template, groupby_col='pmid')
-# avg = maps.avg().smooth(sigma=sigma)
 
 
 @strats.composite
@@ -64,6 +67,7 @@ def random_permitted_case_3D(draw):
 
     return i, j, k, Ni, Nj, Nk
 
+
 @strats.composite
 def random_permitted_case_1D(draw):
     Ni = draw(strats.integers(min_value=1, max_value=max_box_width))
@@ -74,6 +78,7 @@ def random_permitted_case_1D(draw):
 
     return p, Ni, Nj, Nk
 
+
 @strats.composite
 def empty_maps(draw, min_maps=1):
     Ni = draw(strats.integers(min_value=1, max_value=max_box_width))
@@ -82,6 +87,7 @@ def empty_maps(draw, min_maps=1):
     n_maps = draw(strats.integers(min_value=min_maps, max_value=max_maps))
 
     return Maps.zeros(Ni*Nj*Nk, n_maps)
+
 
 @strats.composite
 def random_maps(draw, min_maps=1):
